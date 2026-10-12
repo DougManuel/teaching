@@ -7,3 +7,5 @@ _site/
 *_files/
 *.html
 _publish.yml
+/.quarto/
+**/*.quarto_ipynb
