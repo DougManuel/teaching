@@ -1,0 +1,30 @@
+[
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#the-full-worked-example",
+    "href": "calibration/bus-stop-worked-example.html#the-full-worked-example",
+    "title": "Calibration and discrimination",
+    "section": "The full worked example",
+    "text": "The full worked example\nThe complete slides will be posted here."
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "Teaching",
+    "section": "",
+    "text": "Lecture slides written in Quarto, so that the slides, the data and every calculation live in one reproducible source."
+  },
+  {
+    "objectID": "index.html#lectures",
+    "href": "index.html#lectures",
+    "title": "Teaching",
+    "section": "Lectures",
+    "text": "Lectures\n\n\n\nLecture\nCourse\nDate\n\n\n\n\nCalibration and discrimination: a worked example at the bus stop\nEPI 6101 An Introduction to Machine Learning, University of Ottawa\n13 October 2026"
+  },
+  {
+    "objectID": "index.html#source-and-licence",
+    "href": "index.html#source-and-licence",
+    "title": "Teaching",
+    "section": "Source and licence",
+    "text": "Source and licence\nThe source is on GitHub: DougManuel/teaching.\nText, slides, figures and data are licensed under CC BY 4.0; code under the MIT licence. Third-party material is excluded; see LICENSE.md."
+  }
+]
