@@ -1,0 +1,21 @@
+---
+title: "Teaching"
+subtitle: "Lecture materials by Doug Manuel"
+format:
+  html:
+    theme: cosmo
+---
+
+Lecture slides written in [Quarto](https://quarto.org), so that the slides, the data and every calculation live in one reproducible source.
+
+## Lectures
+
+| Lecture | Course | Date |
+|---|---|---|
+| [Calibration and discrimination: a worked example at the bus stop](calibration/bus-stop-worked-example.html) | EPI 6101 An Introduction to Machine Learning, University of Ottawa | 13 October 2026 |
+
+## Source and licence
+
+The source is on GitHub: [DougManuel/teaching](https://github.com/DougManuel/teaching).
+
+Text, slides, figures and data are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); code under the MIT licence. Third-party material is excluded; see [LICENSE.md](https://github.com/DougManuel/teaching/blob/main/LICENSE.md).

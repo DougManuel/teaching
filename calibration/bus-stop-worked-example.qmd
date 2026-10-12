@@ -1,0 +1,17 @@
+---
+title: "Calibration and discrimination"
+subtitle: "A worked example at the bus stop"
+author: "Doug Manuel"
+date: 2026-10-13
+date-format: "D MMMM YYYY"
+institute: "EPI 6101 An Introduction to Machine Learning"
+format:
+  revealjs:
+    theme: [simple, ../theme/teaching.scss]
+    slide-number: true
+    embed-resources: true
+---
+
+## The full worked example
+
+The complete slides will be posted here.
