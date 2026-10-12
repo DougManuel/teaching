@@ -1,10 +1,311 @@
 [
   {
-    "objectID": "calibration/bus-stop-worked-example.html#the-full-worked-example",
-    "href": "calibration/bus-stop-worked-example.html#the-full-worked-example",
+    "objectID": "calibration/bus-stop-worked-example.html#the-bus-stop",
+    "href": "calibration/bus-stop-worked-example.html#the-bus-stop",
     "title": "Calibration and discrimination",
-    "section": "The full worked example",
-    "text": "The full worked example\nThe complete slides will be posted here."
+    "section": "The bus stop",
+    "text": "The bus stop\n\nAgnes, Beatrice, Clara, Dorothy and Batman waiting at a bus stopIllustration generated with Gemini, prompted by Doug Manuel. Batman is the property of DC Comics.\n\nWho will get on the first bus? Who will let whom on?\nBatman is the polite superhero. Everyone in the class has just made a prediction."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#from-picture-to-data",
+    "href": "calibration/bus-stop-worked-example.html#from-picture-to-data",
+    "title": "Calibration and discrimination",
+    "section": "From picture to data",
+    "text": "From picture to data\n\n\nriders &lt;- data.frame(\n  rider     = c(\"Agnes\", \"Beatrice\", \"Clara\", \"Dorothy\", \"Batman\"),\n  age       = c(35, 80, 85, 80, 40),\n  cane      = c(0, 0, 1, 0, 0),\n  superhero = c(0, 0, 0, 0, 1),\n  boarded   = c(0, 1, 1, 1, 0), # got on the first bus\n  minutes   = c(35, 15.5, 15, 15.25, 35.25) # after 8:00\n)\n\n\nThe first bus has room for three. Observed: 3 of 5 boarded, or 0.60.\nage, cane, superhero: the predictors (in machine learning, features). boarded: the outcome (label or target).\n\nThis is our database. Every later calculation uses these column names: riders\\(age, riders\\)boarded, and the model columns on the next slide. Beatrice and Dorothy are the same age.\nThe order they got on: Clara first (she has the cane and the others let her on), then Dorothy, then Beatrice. The first bus is full. Agnes, the youngest, and Batman, the polite superhero, wait for the next bus. We use the minutes later."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#two-models",
+    "href": "calibration/bus-stop-worked-example.html#two-models",
+    "title": "Calibration and discrimination",
+    "section": "Two models",
+    "text": "Two models\n\\[\n\\text{logit}(p) = \\beta_0 + \\beta_1 \\tfrac{\\text{age} - 60}{10} + \\beta_2\\,\\text{cane} + \\beta_3\\,\\text{superhero}\n\\]\n\\(p\\): probability of boarding the first bus. \\(\\text{logit}(p) = \\log\\frac{p}{1 - p}\\), the log-odds. Each \\(\\beta\\) is a coefficient (weight; \\(\\beta_0\\) is the bias). plogis() turns log-odds back into a probability (the sigmoid function).\n\n\n\n\n\n\n\n\nModel A\nModel B\n\n\n\n\n\\(\\beta_0\\) intercept\n2.0\n0.0\n\n\n\\(\\beta_1\\) age\n0.1\n0.1\n\n\n\\(\\beta_2\\) cane\n1.0\n0.0\n\n\n\\(\\beta_3\\) superhero\n−1.0\n2.5\n\n\n\n\n\n\n\n\n\n\n\nrider\nboarded\nmodel_a\nmodel_b\n\n\n\n\nAgnes\n0\n0.85\n0.44\n\n\nBeatrice\n1\n0.90\n0.55\n\n\nClara\n1\n0.96\n0.56\n\n\nDorothy\n1\n0.90\n0.55\n\n\nBatman\n0\n0.69\n0.91\n\n\n\n\n\n\n\nWhich model is better?\n\n\nModel A knows the cane helps and that superheroes wait, but its intercept is too high: it thinks everyone is likely to board. Model B ignores the cane and thinks superheroes push to the front. Beatrice and Dorothy are the same age, so each model gives them the same probability: a tie.\nAsk the class to vote before going on."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#section",
+    "href": "calibration/bus-stop-worked-example.html#section",
+    "title": "Calibration and discrimination",
+    "section": "",
+    "text": "Discrimination\nWho gets on the bus first?\n\nHow well the predictions differentiate between individuals with and without the outcome.\n\n\nCalibration\nWhen do they get on the bus?\n\nAgreement between observed outcomes and estimated values from the model.\n\n\n\nTRIPOD+AI. BMJ 2024;385. doi:10.1136/bmj-2023-078378\n\n\nDiscrimination is about ranking: does the model put people in the right order? Calibration is about whether the predicted values match what is observed. Discrimination is usually quantified by the c statistic (also called AUC or AUROC for binary outcomes). Today we put numbers on both, using the bus stop."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#the-c-statistic-counts-pairs",
+    "href": "calibration/bus-stop-worked-example.html#the-c-statistic-counts-pairs",
+    "title": "Calibration and discrimination",
+    "section": "The c statistic counts pairs",
+    "text": "The c statistic counts pairs\nPair each rider who boarded with each rider who did not: 3 × 2 = 6 pairs. The c statistic is also called the concordance statistic, and in machine learning the AUC.\nA pair is concordant when the model gives the rider who boarded the higher probability.\n\\[\nc = \\frac{\\text{concordant pairs} + \\tfrac{1}{2}\\,\\text{tied pairs}}{\\text{all pairs}}\n\\]\n\n\\(c = 1\\): perfect ranking\n\\(c = 0.5\\): no better than a coin toss\n\n\nFor a binary outcome the c statistic equals the area under the ROC curve. Counting pairs is the same quantity, and it is easier to see what it means. We come back to the ROC in a few slides."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#model-a-ranks-perfectly-model-b-is-a-coin-toss",
+    "href": "calibration/bus-stop-worked-example.html#model-a-ranks-perfectly-model-b-is-a-coin-toss",
+    "title": "Calibration and discrimination",
+    "section": "Model A ranks perfectly; Model B is a coin toss",
+    "text": "Model A ranks perfectly; Model B is a coin toss\n\nGreen arrow: who got on. Black arrow: the model’s pick (higher probability). Arrows point at the rider: ↑ column, ← row. Grey: both got on, or both waited, so not compared.\n\nRead one cell first: Agnes and Beatrice. Beatrice got on, so the green arrow points up at her. Model A gives Beatrice 0.90 and Agnes 0.85, so its black arrow also points up: they agree, the cell is green. Count the green cells and divide by the cells that are not grey: that is c. Model B’s whole Batman column is red: it is sure Batman will board, and he waits."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#worked-by-hand",
+    "href": "calibration/bus-stop-worked-example.html#worked-by-hand",
+    "title": "Calibration and discrimination",
+    "section": "Worked by hand",
+    "text": "Worked by hand\nEach pair scores 1 if the model ranks the rider who boarded higher, ½ if tied, 0 if not. Then average.\n\\[\nc_A = \\frac{1 + 1 + 1 + 1 + 1 + 1}{6}\n    = \\frac{6}{6}\n    = {\\color{#1b7a3a}\\mathbf{1.00}}\n\\]\n\\[\nc_B = \\frac{1 + 1 + 1 + 0 + 0 + 0}{6}\n    = \\frac{3}{6}\n    = {\\color{#b03030}\\mathbf{0.50}}\n\\]\n\nWalk through one pair on the previous slide (for example Dorothy, who boarded, against Agnes, who did not), then show that the sum is just the column of ticks and crosses added up. Model B’s misses are the pairs that include Batman, whom it is sure will board."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#the-same-count-in-r",
+    "href": "calibration/bus-stop-worked-example.html#the-same-count-in-r",
+    "title": "Calibration and discrimination",
+    "section": "The same count in R",
+    "text": "The same count in R\n\np &lt;- riders$model_b # try model_a too\npairs &lt;- expand.grid(\n  boarded = which(riders$boarded == 1),\n  waited = which(riders$boarded == 0)\n)\nbetter &lt;- p[pairs$boarded] &gt; p[pairs$waited]\ntied &lt;- p[pairs$boarded] == p[pairs$waited]\nmean(better + 0.5 * tied)\n\n[1] 0.5\n\n\n\nLine by line: choose the model, build every boarded and not-boarded pairing, flag the pairs ranked correctly and the ties, then average with ties counting half. This is the same number as the hand calculation."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#from-pairs-to-a-curve-the-roc",
+    "href": "calibration/bus-stop-worked-example.html#from-pairs-to-a-curve-the-roc",
+    "title": "Calibration and discrimination",
+    "section": "From pairs to a curve: the ROC",
+    "text": "From pairs to a curve: the ROC\nPick a threshold \\(t\\) and predict “boards” for anyone with \\(p \\ge t\\). Every threshold gives a different yes/no prediction:\n\\[\n\\text{sensitivity} = \\frac{TP}{\\text{boarded } (3)}\n\\qquad\n1 - \\text{specificity} = \\frac{FP}{\\text{waited } (2)}\n\\]\nModel B. \\(TP\\), true positives: predicted to board, and did. \\(FP\\), false positives: predicted to board, but waited. Machine learning calls sensitivity recall or the true positive rate, and 1 − specificity the false positive rate.\n\n\n\n\n\nPredict boards if p\nTP\nFP\nSensitivity\n1 − specificity\n\n\n\n\nnone\n0\n0\n0.00\n0.00\n\n\n≥ 0.91\n0\n1\n0.00\n0.50\n\n\n≥ 0.56\n1\n1\n0.33\n0.50\n\n\n≥ 0.55\n3\n1\n1.00\n0.50\n\n\n≥ 0.44\n3\n2\n1.00\n1.00\n\n\n\n\n\n\nThe table is for Model B. Lowering the threshold moves the curve up for each rider who boarded and right for each who waited."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#roc-curves-for-models-a-and-b",
+    "href": "calibration/bus-stop-worked-example.html#roc-curves-for-models-a-and-b",
+    "title": "Calibration and discrimination",
+    "section": "ROC curves for Models A and B",
+    "text": "ROC curves for Models A and B\n\nThe dashed diagonal is a coin toss."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#the-area-under-the-curve-is-the-c-statistic",
+    "href": "calibration/bus-stop-worked-example.html#the-area-under-the-curve-is-the-c-statistic",
+    "title": "Calibration and discrimination",
+    "section": "The area under the curve is the c statistic",
+    "text": "The area under the curve is the c statistic\nAdd up the trapezoids: each step adds width × average height, \\(\\Delta x \\times \\tfrac{1}{2}(\\text{sens}_{k-1} + \\text{sens}_k)\\).\n\\(\\Delta x\\): the step in 1 − specificity. \\(\\text{sens}_k\\): sensitivity at threshold \\(k\\).\n\\[\n\\text{area}_B = 0.00 + 0.00 + 0.00 + 0.50 = {\\color{#b03030}\\mathbf{0.50}}\n\\]\nThe same number as counting pairs: \\(c_B\\) = 0.50.\n\n# rb: the ROC table from two slides back\nrb &lt;- roc_points(riders$model_b, riders$boarded)\ndx &lt;- diff(rb$fpr)\nheight &lt;- (head(rb$tpr, -1) + tail(rb$tpr, -1)) / 2\nsum(dx * height)\n\n[1] 0.5\n\n\n\nTwo routes to the same quantity: count the correctly ranked pairs, or integrate the ROC curve. For a binary outcome they are identical, and ties get half credit either way."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#a-word-of-caution-about-the-roc",
+    "href": "calibration/bus-stop-worked-example.html#a-word-of-caution-about-the-roc",
+    "title": "Calibration and discrimination",
+    "section": "A word of caution about the ROC",
+    "text": "A word of caution about the ROC\n\nThe ROC curve is everywhere in machine learning. In medicine it is debated.\nIt summarises ranking over every threshold, including thresholds nobody would use.\nIt ignores calibration. Model A has c = 1.00 but predicts 0.86 on average when 0.60 boarded.\nIt ignores the costs of false positives and false negatives at the threshold you actually choose.\nReport it alongside a calibration plot, and a decision-focused measure such as net benefit (the good done by true positives minus the harm of false positives, at the threshold you use).\n\n\nKeep this short. The point is that a high c alone does not make a model useful, which is why the next section is about calibration."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#calibration-in-the-large-compare-the-averages",
+    "href": "calibration/bus-stop-worked-example.html#calibration-in-the-large-compare-the-averages",
+    "title": "Calibration and discrimination",
+    "section": "Calibration-in-the-large: compare the averages",
+    "text": "Calibration-in-the-large: compare the averages\n\\[\nO = \\frac{1}{N}\\sum_{i=1}^{N} y_i \\qquad E = \\frac{1}{N}\\sum_{i=1}^{N} p_i\n\\]\nO, observed: the share who boarded. E, expected: the average predicted probability. \\(N\\) = 5 riders. \\(y_i\\): rider \\(i\\)’s boarded (1 = got on, 0 = waited). \\(p_i\\): rider \\(i\\)’s predicted probability (model_a or model_b).\n\\[\nO = \\frac{0 + 1 + 1 + 1 + 0}{5} = 0.60\n\\]\n\\[\nE_A = \\frac{0.85 + 0.90 + 0.96 + 0.90 + 0.69}{5} = \\frac{4.30}{5} = 0.86\n\\]\n\\[\nE_B = \\frac{0.44 + 0.55 + 0.56 + 0.55 + 0.91}{5} = \\frac{3.01}{5} = 0.60\n\\]\n\nCalibration-in-the-large only checks the average. Model B matches on average, yet its predictions for individual riders are poor. Seeing calibration across the range of risk needs a calibration plot, and that needs more than five riders."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#observed-against-predicted",
+    "href": "calibration/bus-stop-worked-example.html#observed-against-predicted",
+    "title": "Calibration and discrimination",
+    "section": "Observed against predicted",
+    "text": "Observed against predicted\n\\[\n\\text{O/E}_A = \\frac{0.60}{0.86} = 0.70\n\\qquad\n\\text{O/E}_B = \\frac{0.60}{0.60} = 1.00\n\\]\n\nModel A over-predicts by 43%: “much higher” (more than 20%) on the scale used to judge the Framingham equations in Canada.\n\nGrey is what happened: 3 of 5 boarded. Blue is what each model expected on average. Model A’s bar is too tall: it over-predicts. Model B’s bars match, even though its ranking is poor. Calibration-in-the-large only checks the average."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#brier-score-average-squared-error",
+    "href": "calibration/bus-stop-worked-example.html#brier-score-average-squared-error",
+    "title": "Calibration and discrimination",
+    "section": "Brier score: average squared error",
+    "text": "Brier score: average squared error\n\\[\n\\text{Brier} = \\frac{1}{N}\\sum_{i=1}^{N} (p_i - y_i)^2\n\\]\n\\(p_i\\): predicted probability (model_a, model_b). \\(y_i\\): boarded, 1 or 0. \\(N\\) = 5 riders. In machine learning, the Brier score is the mean squared error of the probabilities.\n\n\n\n\n\n\n\n\n\n\n\nrider\nboarded\nModel A\nModel B\n\n\n\n\nAgnes\n0\n(0.85 − 0)² = 0.72\n(0.44 − 0)² = 0.19\n\n\nBeatrice\n1\n(0.90 − 1)² = 0.01\n(0.55 − 1)² = 0.20\n\n\nClara\n1\n(0.96 − 1)² = 0.00\n(0.56 − 1)² = 0.19\n\n\nDorothy\n1\n(0.90 − 1)² = 0.01\n(0.55 − 1)² = 0.20\n\n\nBatman\n0\n(0.69 − 0)² = 0.48\n(0.91 − 0)² = 0.83\n\n\n\n\nBrier = 1.22 / 5 = 0.24\nBrier = 1.61 / 5 = 0.32\n\n\n\n\n\n\nEach cell is one rider: the prediction from the “Two models” slide, minus what happened, squared. 0 is perfect. Predicting 0.60 for everyone gives 0.24, so Model A, at 0.24, is no better than knowing only the average."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#picturing-the-brier-score",
+    "href": "calibration/bus-stop-worked-example.html#picturing-the-brier-score",
+    "title": "Calibration and discrimination",
+    "section": "Picturing the Brier score",
+    "text": "Picturing the Brier score\n\nBlue: the prediction. White: what happened (1 = boarded, 0 = waited). The red line is the error; the number under each rider is its square. Average the squares.\n\nEach red line is one rider’s error. Squaring makes the long lines count much more: Model B’s line for Batman alone is 0.83, more than any of Model A’s. Model A’s lines are short for the riders who boarded and long for Agnes and Batman, because it thinks everyone boards."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#the-brier-score-mixes-both-problems",
+    "href": "calibration/bus-stop-worked-example.html#the-brier-score-mixes-both-problems",
+    "title": "Calibration and discrimination",
+    "section": "The Brier score mixes both problems",
+    "text": "The Brier score mixes both problems\n\n\nModel A\nPerfect ranking (c = 1.00), yet a Brier score of 0.24, no better than predicting 0.60 for everyone\n\nModel B\nRight on average (O/E = 1.00), yet a Brier score of 0.32, worse still\n\n\nOne number cannot tell you which problem a model has. Report discrimination and calibration separately (TRIPOD+AI)."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#f1-and-accuracy-mix-them-too",
+    "href": "calibration/bus-stop-worked-example.html#f1-and-accuracy-mix-them-too",
+    "title": "Calibration and discrimination",
+    "section": "F1 and accuracy mix them too",
+    "text": "F1 and accuracy mix them too\nMachine learning often scores a model at a threshold: predict “boards” if \\(p \\ge 0.50\\).\n\n\n\n\n\n\nModel A\nModel B\n\n\n\n\nPrecision (PPV) = TP / (TP + FP)\n3 / 5 = 0.60\n3 / 4 = 0.75\n\n\nRecall (sensitivity) = TP / (TP + FN)\n3 / 3 = 1.00\n3 / 3 = 1.00\n\n\nF1\n0.75\n0.86\n\n\nAccuracy = (TP + TN) / N\n0.60\n0.80\n\n\nc statistic\n1.00\n0.50\n\n\nO/E\n0.70\n1.00\n\n\n\n\n\nF1 \\(= \\dfrac{2 \\times \\text{precision} \\times \\text{recall}}{\\text{precision} + \\text{recall}}\\). Precision is the positive predictive value (PPV): the share of predicted boarders who boarded. Recall is sensitivity. TN, true negatives: predicted to wait, and did.\n\nBy F1, the coin-toss model wins.\n\n\nModel A puts everyone above 0.5, so it predicts that all five board: precision 0.60, recall 1.00. Model B predicts everyone but Agnes boards, including Batman. F1 depends on the ranking, on where the predictions sit relative to the threshold (calibration), on the threshold itself and on how common the outcome is, and it ignores true negatives. So a single F1 cannot tell you which problem a model has. After recalibration, Model A’s F1 at 0.5 becomes 0.86 with c unchanged at 1.00. In health and medicine, report discrimination and calibration separately, and judge thresholds by their clinical consequences (net benefit)."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#recalibrate-model-a-shift-the-log-odds",
+    "href": "calibration/bus-stop-worked-example.html#recalibrate-model-a-shift-the-log-odds",
+    "title": "Calibration and discrimination",
+    "section": "Recalibrate Model A: shift the log-odds",
+    "text": "Recalibrate Model A: shift the log-odds\n\\[\n\\text{logit}(p_i^{*}) = \\text{logit}(p_i) + a\n\\]\nEstimate \\(a\\) with a logistic regression that has \\(\\text{logit}(p_i)\\) as an offset: \\(a\\) = −1.58\n\\(p_i^{*}\\): rider \\(i\\)’s recalibrated probability. \\(a\\): one shift, the same for every rider. An offset keeps \\(\\text{logit}(p_i)\\) fixed, so only \\(a\\) is estimated.\n\n\n\n\n\n\nModel A\nModel A recalibrated\n\n\n\n\nMean predicted\n0.86\n0.60\n\n\nc statistic\n1.00\n1.00\n\n\nBrier score\n0.24\n0.13\n\n\n\n\n\n\nRecalibrated predictions: Agnes 0.54; Beatrice 0.65; Clara 0.84; Dorothy 0.65; Batman 0.31."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#recalibration-cannot-fix-discrimination",
+    "href": "calibration/bus-stop-worked-example.html#recalibration-cannot-fix-discrimination",
+    "title": "Calibration and discrimination",
+    "section": "Recalibration cannot fix discrimination",
+    "text": "Recalibration cannot fix discrimination\n\nSame constant added to every log-odds: same order, same arrows. Model A can be repaired; Model B needs new coefficients, a new model.\n\nThe probabilities change (0.86 on average becomes 0.60), but no black arrow moves. Recalibration cannot turn a red cell green. In the formula, recalibration only changes Model A’s intercept, from 2.0 to 0.42."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#boarding-times",
+    "href": "calibration/bus-stop-worked-example.html#boarding-times",
+    "title": "Calibration and discrimination",
+    "section": "Boarding times",
+    "text": "Boarding times\n\nEveryone reaches the stop at 8:00. Order of boarding: Clara, Dorothy, Beatrice, Agnes, Batman.\n\nThese times are made up. Clara gets on first, Dorothy 15 seconds later, then Beatrice. The bus is full, so Agnes and Batman take the second bus. Most medical prediction models are like this: the outcome is the time to an event."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#a-model-for-time",
+    "href": "calibration/bus-stop-worked-example.html#a-model-for-time",
+    "title": "Calibration and discrimination",
+    "section": "A model for time",
+    "text": "A model for time\n\\[\nh_i(t) = h_0(t)\\,\\exp(\\text{lp}_i)\n\\]\n\\[\n\\text{lp}_i = 0.1\\,\\tfrac{\\text{age} - 60}{10} + 1.0\\,\\text{cane} - 1.0\\,\\text{superhero}\n\\]\n\\[\nS_i(t) = S_0(t)^{\\exp(\\text{lp}_i)} \\qquad P_i(\\text{on a bus by } t) = 1 - S_i(t)\n\\]\n\\(\\text{lp}_i\\): the linear predictor, the weighted sum of rider \\(i\\)’s predictors (Model A’s slopes, no intercept). \\(h_i(t)\\): rider \\(i\\)’s hazard, the chance of boarding in the next moment if still waiting. \\(h_0(t)\\): the baseline hazard. \\(\\exp(\\text{lp}_i)\\): the hazard ratio. \\(S_i(t)\\): the chance rider \\(i\\) is still waiting at time \\(t\\). \\(S_0(t)\\): the baseline survival, the chance a rider with \\(\\text{lp} = 0\\) is still waiting at \\(t\\).\n\nThe same slopes as Model A, but no intercept: the baseline takes its place."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#predictions-for-820",
+    "href": "calibration/bus-stop-worked-example.html#predictions-for-820",
+    "title": "Calibration and discrimination",
+    "section": "Predictions for 8:20",
+    "text": "Predictions for 8:20\n\\(S_0(\\text{8:20}) = 0.41\\), set so the average prediction matches the on-time day, so \\(P_i(\\text{on a bus by 8:20}) = 1 - 0.41^{\\exp(\\text{lp}_i)}\\).\n\n\n\n\n\nrider\nlp\nexp(lp)\nOn a bus by 8:20\n\n\n\n\nAgnes\n−0.25\n0.78\n0.50\n\n\nBeatrice\n0.20\n1.22\n0.66\n\n\nClara\n1.25\n3.49\n0.96\n\n\nDorothy\n0.20\n1.22\n0.66\n\n\nBatman\n−1.20\n0.30\n0.24\n\n\n\n\n\nClara: \\(1 - 0.41^{3.49} = 0.96\\)\n\nThis is the Cox proportional hazards model, the usual model for time to an event. Same predictors and slopes as Model A, so the same order. There is no intercept: the baseline takes its place. S0(8:20) = 0.41 is set so that the average prediction, 0.60, matches the 0.60 on board by 8:20 on an on-time day."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#with-time-who-got-on-first",
+    "href": "calibration/bus-stop-worked-example.html#with-time-who-got-on-first",
+    "title": "Calibration and discrimination",
+    "section": "With time: who got on first?",
+    "text": "With time: who got on first?\n\nGreen arrow: who got on first. Black arrow: the model’s pick. Everyone boarded at a different time, so no cell is grey.\n\nSame grid as before, now with time. The grey cells are filled in: Clara against Dorothy, Agnes against Batman, and so on. Model A agrees everywhere except Beatrice against Dorothy: same age, same probability, so that pair scores half. This is why we only score pairs with different outcomes: with the yes-or-no outcome Beatrice and Dorothy both boarded, so their tie never counted. Model B gets every pair with Batman wrong, and ties Beatrice and Dorothy too."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#with-time-every-pair-counts",
+    "href": "calibration/bus-stop-worked-example.html#with-time-every-pair-counts",
+    "title": "Calibration and discrimination",
+    "section": "With time, every pair counts",
+    "text": "With time, every pair counts\nAny two riders who boarded at different times make a pair: 10 pairs, not 6. A pair is concordant when the rider who boarded first had the higher predicted probability.\n\\[\nc_A = \\frac{1 + 1 + 1 + 1 + 1 + 0.5 + 1 + 1 + 1 + 1}{10}\n    = {\\color{#1b7a3a}\\mathbf{0.95}}\n\\]\n\\[\nc_B = \\frac{1 + 1 + 1 + 0 + 1 + 0.5 + 0 + 1 + 0 + 0}{10}\n    = {\\color{#b03030}\\mathbf{0.55}}\n\\]\nModel A goes from 1.00 to 0.95 and Model B from 0.50 to 0.55: time also checks the order within the riders who boarded and within those who waited, and a tie there scores ½.\n\nThis is Harrell’s c, the usual c statistic for survival models. With yes-or-no outcomes we only compared boarders with non-boarders. With times we can also ask whether the model knew Clara would beat Dorothy, and Agnes would beat Batman. If someone were still waiting when we stopped watching (censored), pairs would only count when the earlier rider actually boarded."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#the-same-count-in-r-with-time",
+    "href": "calibration/bus-stop-worked-example.html#the-same-count-in-r-with-time",
+    "title": "Calibration and discrimination",
+    "section": "The same count in R, with time",
+    "text": "The same count in R, with time\n\nlibrary(survival)\nriders$event &lt;- 1 # everyone boards eventually\nfit &lt;- concordance(\n  Surv(minutes, event) ~ model_b,\n  data = riders,\n  reverse = TRUE # higher p = earlier boarding\n)\nfit$concordance\n\n[1] 0.55\n\n\n\nSurv() pairs each time with whether the event happened. reverse = TRUE tells R that a higher predicted probability should go with a shorter time. The answer matches the hand count."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#rank-order-the-same-pairs-without-the-clock",
+    "href": "calibration/bus-stop-worked-example.html#rank-order-the-same-pairs-without-the-clock",
+    "title": "Calibration and discrimination",
+    "section": "Rank order: the same pairs, without the clock",
+    "text": "Rank order: the same pairs, without the clock\n\nLeft: the order they got on. Right: the order the model predicted. Each crossing is a pair the model got backwards; lines that meet are a tie.\n\nRanks only, no clock. Model A’s lines never cross; Beatrice and Dorothy meet because the model gives them the same probability. Model B’s Batman line crosses all four others: the model puts him first, and he got on last."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#somers-d-right-minus-wrong",
+    "href": "calibration/bus-stop-worked-example.html#somers-d-right-minus-wrong",
+    "title": "Calibration and discrimination",
+    "section": "Somers’ D: right minus wrong",
+    "text": "Somers’ D: right minus wrong\n\\[\nD = \\frac{\\text{concordant} - \\text{discordant}}{\\text{all pairs}} = 2c - 1\n\\]\n\\[\nD_A = \\frac{9 - 0}{10} = 0.90\n\\qquad\nD_B = \\frac{5 - 4}{10} = 0.10\n\\]\n\n\n\n\n\n\nCoin toss\nPerfect\nModel A\nModel B\n\n\n\n\nc statistic (AUC)\n0.50\n1.00\n0.95\n0.55\n\n\nSomers’ D = 2c − 1\n0.00\n1.00\n0.90\n0.10\n\n\n\n\n\nTies count in “all pairs” but neither add nor subtract. In machine learning, 2 × AUC − 1 is called the Gini coefficient: the same quantity. A ranking has no probabilities, so there is nothing to calibrate.\n\nc and Somers’ D carry the same information on different scales. c runs from 0.5 (coin toss) to 1 (perfect); Somers’ D runs from 0 to 1, and down to −1 for a model that ranks everyone exactly backwards. Model A: 9 right, 0 wrong, 1 tie. Model B: 5 right, 4 wrong (all the pairs with Batman), 1 tie. Rank-order outcomes are common in machine learning (search, recommendation) and often neglected in medicine."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#the-bus-is-15-minutes-late",
+    "href": "calibration/bus-stop-worked-example.html#the-bus-is-15-minutes-late",
+    "title": "Calibration and discrimination",
+    "section": "The bus is 15 minutes late",
+    "text": "The bus is 15 minutes late\n\nSame riders, same order. Every boarding is 15 minutes later."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#same-ranking-broken-calibration",
+    "href": "calibration/bus-stop-worked-example.html#same-ranking-broken-calibration",
+    "title": "Calibration and discrimination",
+    "section": "Same ranking, broken calibration",
+    "text": "Same ranking, broken calibration\nThe Cox model’s predictions for 8:20 do not change: same riders, same order.\n\n\nDiscrimination is about order, so a late bus cannot change it. Calibration is about the time to event.\n\n\nThe same picture as observed against predicted for Models A and B. The blue bars are identical: the model sees the same riders. On the late day nobody is on a bus by 8:20, so the grey bar is empty and O/E falls to zero. The order of boarding is unchanged, so c is the same on both days.\nThis is the example from the lecture: near-perfect discrimination, and the bus comes late, so calibration is terrible. In medicine the late bus is a change in baseline risk: a new population, better treatment, a different era. Predictions are made for a horizon, such as the 5-year risk of stroke."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#the-baseline-is-the-timetable",
+    "href": "calibration/bus-stop-worked-example.html#the-baseline-is-the-timetable",
+    "title": "Calibration and discrimination",
+    "section": "The baseline is the timetable",
+    "text": "The baseline is the timetable\n\nBefore a bus comes nobody can board, so \\(S_0(t) = 1\\); each bus is a step down. A model that takes \\(S_0\\) from the published timetable is calibrated only when the buses run on time.\n\nThe heights between buses are illustrative, anchored at the 0.41 we set for 8:20. The dotted line is 8:20: on time, a rider with lp = 0 has a 0.41 chance of still waiting; when the buses are late, 1.00.\nThere are two ways to get a baseline. Usually it is estimated from the data: the observed boarding times (in a Cox model, the Breslow estimator). Or it comes from a published source: here the bus timetable; in medicine, a life table or a registry for baseline mortality or incidence. Either way, the predictors set the order and the baseline sets the clock. Using a model somewhere new is like trusting another city’s timetable. If the day is known to matter (snow, rush hour), a model can carry one baseline per kind of day: a stratified Cox model."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#calibration-depends-on-the-time-horizon",
+    "href": "calibration/bus-stop-worked-example.html#calibration-depends-on-the-time-horizon",
+    "title": "Calibration and discrimination",
+    "section": "Calibration depends on the time horizon",
+    "text": "Calibration depends on the time horizon\n\n\n\n\n\nObserved\nOn time\n15 minutes late\n\n\n\n\nOn board by 8:20\n0.60\n0.00\n\n\nOn board by 8:40\n1.00\n0.60\n\n\n\n\n\nThe late bus changes the baseline, \\(S_0(t)\\). On the late day nobody is on a bus by 8:20, so \\(S_0(\\text{8:20})\\) should be 1.00, not 0.41.\nThe linear predictor \\(\\text{lp}_i\\), which sets the order, is untouched. Recalibrating means re-estimating \\(S_0(t)\\) for the new day, just as we shifted the intercept for Model A.\n\nThe late day at 8:40 looks like the on-time day at 8:20. Calibration has to be checked at the horizon the model is used for. \\(S_i(t)\\) is rider i’s chance of still waiting at time t."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#why-calibration-is-harder-than-discrimination",
+    "href": "calibration/bus-stop-worked-example.html#why-calibration-is-harder-than-discrimination",
+    "title": "Calibration and discrimination",
+    "section": "Why calibration is harder than discrimination",
+    "text": "Why calibration is harder than discrimination\n\nAge, cane and superhero status tell us who gets on before whom: the order\nNothing in our data says when the bus comes. That is the baseline, \\(S_0(t)\\): the timetable, the traffic, the day\nDiscrimination needs only the order, so it travels from one bus stop to another\nCalibration needs the order and the baseline, so it has to be checked, and often re-estimated, wherever the model is used\n\n\nIn medicine the baseline is the background risk of the population: a different country, a different decade, better treatment. That is why a model such as the Framingham equations can rank Canadians well and still over-predict their risk. The predictors describe the people; the baseline describes the setting."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#a-calibration-plot-needs-many-riders",
+    "href": "calibration/bus-stop-worked-example.html#a-calibration-plot-needs-many-riders",
+    "title": "Calibration and discrimination",
+    "section": "A calibration plot needs many riders",
+    "text": "A calibration plot needs many riders\n\n5,000 simulated riders scored with Model A’s formula. Line: LOESS curve with 95% band. Circles: tenths of predicted risk. Ticks: where predictions fall. Dashed: perfect calibration.\n\nTRIPOD+AI asks for a flexible calibration curve, such as LOESS, with summary measures, rather than grouped points alone. Simulated, not real. The true model has Model A’s slopes but an intercept of 0.5 instead of 2.0, so Model A over-predicts for everyone. Predictions only span about 0.74 to 0.96, because age, cane and superhero status are weak predictors: a short curve is honest. Recalibration moves the curve onto the diagonal."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#reading-the-plot-and-how-we-recalibrated",
+    "href": "calibration/bus-stop-worked-example.html#reading-the-plot-and-how-we-recalibrated",
+    "title": "Calibration and discrimination",
+    "section": "Reading the plot, and how we recalibrated",
+    "text": "Reading the plot, and how we recalibrated\n\nCalibration intercept: are predictions too high or too low overall? Ideal 0. Model A: −1.48, too high\nCalibration slope: is the spread right? Ideal 1. Below 1, predictions are too extreme (common after overfitting). Model A: 0.95, about right\nOnly the intercept is wrong, so we shift every rider’s log-odds by the same amount:\n\n\n\nfit &lt;- glm(boarded ~ 1, offset = qlogis(model_a),\n  family = binomial, data = sim)\nsim$model_a_recal &lt;- plogis(qlogis(sim$model_a) + coef(fit))\n\n\nqlogis(): probability to log-odds; plogis(): back again. The offset keeps each rider’s log-odds fixed, so only the shift \\(a\\) = −1.48 is estimated. If the slope were off too, fit \\(\\text{logit}(p^{*}) = a + b\\,\\text{logit}(p)\\) instead; machine learning calls this Platt scaling.\n\nAfter recalibration the intercept is 0.00 and the slope still 0.95: shifting cannot change the spread. Here we recalibrated and checked on the same simulated riders, which flatters the result. In practice, recalibrate with data from the new setting, then check on fresh data."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#summary-measures-ici-e50-and-e90",
+    "href": "calibration/bus-stop-worked-example.html#summary-measures-ici-e50-and-e90",
+    "title": "Calibration and discrimination",
+    "section": "Summary measures: ICI, E50 and E90",
+    "text": "Summary measures: ICI, E50 and E90\nHow far is the curve from the diagonal, on average and at worst?\n\\[\n\\text{ICI} = \\frac{1}{N}\\sum_{i=1}^{N} \\left| p_i - \\hat{y}_i \\right|\n\\]\n\\(\\hat{y}_i\\): the LOESS curve’s observed proportion at rider \\(i\\)’s predicted probability. E50 and E90: the median and the 90th percentile of \\(|p_i - \\hat{y}_i|\\).\n\n\n\n\n\n\nModel A\nRecalibrated A\n\n\n\n\nCalibration intercept (ideal 0)\n−1.48\n0.00\n\n\nCalibration slope (ideal 1)\n0.95\n0.95\n\n\nICI\n0.24\n0.01\n\n\nE50\n0.25\n0.01\n\n\nE90\n0.30\n0.02\n\n\n\n\n\nAustin and Steyerberg. Stat Med 2019;38:4051–65. doi:10.1002/sim.8281"
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#a-ladder-of-recalibration",
+    "href": "calibration/bus-stop-worked-example.html#a-ladder-of-recalibration",
+    "title": "Calibration and discrimination",
+    "section": "A ladder of recalibration",
+    "text": "A ladder of recalibration\n\n\n\n\n\n\n\n\n\n\n\n\nStep\nMethod\nWhat changes\nBus-stop problem\n\n\n\n\n1\nIntercept (in the large)\nOne shift\nModel A over-predicts\n\n\n1\nBaseline (survival)\n\\(S_0(t)\\)\nThe bus is late\n\n\n2\nIntercept and slope (Platt)\nShift and stretch\nModel C is overconfident\n\n\n3\nIsotonic regression\nAny increasing curve\nAn irregular curve\n\n\n4\nRevision\nSome coefficients\nModel B’s superhero sign\n\n\n5\nRefit\nEverything\nNothing else works\n\n\n\n\n\n\nClimb only as far as you need: each step needs more data and can overfit the recalibration itself. Steps 1 to 3 keep the order of riders, so they cannot change discrimination; steps 4 and 5 change the model itself.\n\nStart at the bottom. Calibration-in-the-large needs only the outcome rate in the new setting; the slope needs individual outcomes; isotonic regression needs many. Revision and refitting are no longer recalibration: they change the ranking, which is why Model B cannot be rescued by recalibration."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#step-2-intercept-and-slope",
+    "href": "calibration/bus-stop-worked-example.html#step-2-intercept-and-slope",
+    "title": "Calibration and discrimination",
+    "section": "Step 2: intercept and slope",
+    "text": "Step 2: intercept and slope\nModel C was developed at a small, unusual bus stop. Same predictors, but the coefficients are too large: \\(\\text{logit}(p) = 1.5 + 0.25\\,\\tfrac{\\text{age} - 60}{10} + 2.5\\,\\text{cane} − 2.5\\,\\text{superhero}\\)\n\\[\n\\text{logit}(p^{*}) = a + b\\,\\text{logit}(p) \\qquad a = −0.04, \\quad b = 0.38\n\\]\n\\(b = 1\\) is intercept-only recalibration (step 1). \\(b &lt; 1\\): predictions are too extreme, so they are pulled toward the middle. \\(b &gt; 1\\): too timid, so they are spread out. Machine learning calls this Platt scaling.\n\n\nfit &lt;- glm(boarded ~ qlogis(model_c), family = binomial, data = sim)\nsim$model_c_recal &lt;- predict(fit, type = \"response\")"
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#model-c-at-the-bus-stop",
+    "href": "calibration/bus-stop-worked-example.html#model-c-at-the-bus-stop",
+    "title": "Calibration and discrimination",
+    "section": "Model C at the bus stop",
+    "text": "Model C at the bus stop\n\n\n\n\n\nrider\nboarded\nModel C\nRecalibrated C\n\n\n\n\nAgnes\n0\n0.71\n0.57\n\n\nBeatrice\n1\n0.88\n0.67\n\n\nClara\n1\n0.99\n0.85\n\n\nDorothy\n1\n0.88\n0.67\n\n\nBatman\n0\n0.18\n0.35\n\n\n\n\n\nClara: \\(\\text{logit}(0.99) = 4.62\\), so \\(p^{*} = \\text{plogis}(−0.04 + 0.38 \\times 4.62) = 0.85\\)\nEvery prediction moves toward the middle; the order of riders does not change.\n\nModel C is sure Clara will board (0.99) and sure Batman will not. Shrinking the log-odds by b = 0.38 keeps the order but tempers the confidence. Five riders are far too few to estimate a slope; a and b come from the 5,000 simulated riders."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#when-the-slope-is-wrong-too",
+    "href": "calibration/bus-stop-worked-example.html#when-the-slope-is-wrong-too",
+    "title": "Calibration and discrimination",
+    "section": "When the slope is wrong too",
+    "text": "When the slope is wrong too\n\nIntercept-only recalibration moves the curve but leaves it tilted. Adding the slope straightens it. Isotonic regression fits any increasing curve, and checked on the riders it was fitted to, it flatters itself."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#beyond-the-formula",
+    "href": "calibration/bus-stop-worked-example.html#beyond-the-formula",
+    "title": "Calibration and discrimination",
+    "section": "Beyond the formula",
+    "text": "Beyond the formula\n\nIsotonic regression: the best increasing staircase through the data. No formula, so it needs many riders, and it can overfit\nModel revision: re-estimate the coefficients that are wrong. Model B’s superhero coefficient (2.5) points the wrong way; no shift or stretch can put Batman back in line\nRefit: build a new model\nWhich step? Start at the bottom and climb only while the step below leaves miscalibration; check the result on fresh data\n\n\nThis is the logic of a closed testing procedure for choosing how far to update a model (Vergouwe and colleagues, Statistics in Medicine, 2017; doi:10.1002/sim.7179). Isotonic regression and Platt scaling are the methods most used in machine learning; logistic recalibration and baseline updating are the most used in clinical prediction."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#two-vocabularies-one-idea",
+    "href": "calibration/bus-stop-worked-example.html#two-vocabularies-one-idea",
+    "title": "Calibration and discrimination",
+    "section": "Two vocabularies, one idea",
+    "text": "Two vocabularies, one idea\n\n\n\n\n\n\nBiostatistics\nMachine learning\n\n\n\n\nOutcome\nLabel, target\n\n\nPredictors\nFeatures\n\n\nCoefficient; intercept\nWeight; bias\n\n\nLogistic function (plogis())\nSigmoid\n\n\nc statistic, concordance\nAUC, AUROC\n\n\nSensitivity\nRecall, true positive rate\n\n\n1 − specificity\nFalse positive rate\n\n\nPositive predictive value\nPrecision\n\n\nSomers’ D\nGini coefficient\n\n\nBrier score\nMean squared error of probabilities\n\n\nLog-likelihood (negative)\nLog loss, cross-entropy\n\n\nLogistic recalibration\nPlatt scaling\n\n\nDevelopment and validation data\nTraining and test data\n\n\n\n\n\n\n\nSame ideas, two names. Students reading machine-learning papers and clinical prediction papers will meet both. Log loss, like the Brier score, mixes discrimination and calibration."
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#take-home-points",
+    "href": "calibration/bus-stop-worked-example.html#take-home-points",
+    "title": "Calibration and discrimination",
+    "section": "Take-home points",
+    "text": "Take-home points\n\nDiscrimination is about order: the c statistic counts correctly ranked pairs, which equals the area under the ROC curve\nCalibration is about agreement: compare predicted with observed, on average (O/E) and across the range (calibration plot, ICI)\nThe Brier score, F1 and accuracy blend both, so they cannot tell you which problem a model has\nRecalibration can fix calibration but never discrimination: start with the intercept, and add the slope only if needed\nTime matters for calibration, not discrimination: a late bus breaks calibration and leaves the ranking alone"
+  },
+  {
+    "objectID": "calibration/bus-stop-worked-example.html#try-it-yourself",
+    "href": "calibration/bus-stop-worked-example.html#try-it-yourself",
+    "title": "Calibration and discrimination",
+    "section": "Try it yourself",
+    "text": "Try it yourself\n\n\nriders &lt;- data.frame(\n  rider     = c(\"Agnes\", \"Beatrice\", \"Clara\", \"Dorothy\", \"Batman\"),\n  age       = c(35, 80, 85, 80, 40),\n  cane      = c(0, 0, 1, 0, 0),\n  superhero = c(0, 0, 0, 0, 1),\n  boarded   = c(0, 1, 1, 1, 0)\n)\n# Model A (see the slide \"Two models\")\nriders$model_a &lt;- with(riders, plogis(\n  2.0 + 0.1 * (age - 60) / 10 + 1.0 * cane - 1.0 * superhero\n))\np &lt;- riders$model_a\n\n# c statistic (ties count half)\npairs &lt;- expand.grid(\n  boarded = which(riders$boarded == 1),\n  waited = which(riders$boarded == 0)\n)\nbetter &lt;- p[pairs$boarded] &gt; p[pairs$waited]\ntied &lt;- p[pairs$boarded] == p[pairs$waited]\nmean(better + 0.5 * tied)\n\nmean(riders$boarded) / mean(p) # O/E\nmean((p - riders$boarded)^2)   # Brier score\n\n# Recalibrate: shift the log-odds\nfit &lt;- glm(boarded ~ 1, offset = qlogis(model_a), family = binomial, data = riders)\nplogis(qlogis(p) + coef(fit))"
   },
   {
     "objectID": "index.html",
