@@ -1,9 +1,14 @@
 # Quarto project for the public site (GitHub Pages).
-# Published with `quarto publish gh-pages` from the public repo.
+# Published with `quarto publish gh-pages` from the public repo, which needs a website project.
 # This file lives in the private repo at publish/site/_quarto.yml and is copied by publish/publish.sh.
 project:
-  type: default
+  type: website
   output-dir: _site
   render:
     - index.qmd
     - calibration/*.qmd
+
+website:
+  title: "Teaching"
+  site-url: "https://dougmanuel.github.io/teaching/"
+  repo-url: "https://github.com/DougManuel/teaching"
