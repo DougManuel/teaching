@@ -18,7 +18,7 @@ quarto render calibration/bus-stop-worked-example.qmd
 
 The output is a single reveal.js HTML file. Rendering needs R with the `knitr`, `ggplot2` and `survival` packages (`survival` ships with R). Equations load MathJax from the web, so the slides need an internet connection to display them.
 
-Rendered slides and PDFs for each lecture, as presented, are attached to the [releases](https://github.com/DougManuel/teaching/releases). Release tags name the lecture and year, for example `calibration-2026`.
+Rendered slides and PDFs for each lecture, as presented, are attached to the [releases](https://github.com/DougManuel/teaching/releases). Release tags name the lecture and year, for example `calibration-2026`, with `-v2` and so on for a later release of the same lecture in the same year.
 
 ## Shared theme
 

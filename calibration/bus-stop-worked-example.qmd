@@ -9,9 +9,1354 @@ format:
   revealjs:
     theme: [simple, ../theme/teaching.scss]
     slide-number: true
+    html-math-method: mathjax
     embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
 ---
 
-## The full worked example
+```{r}
+#| label: setup
+library(knitr)
+library(ggplot2)
 
-The complete slides will be posted here.
+# Every pairing of a rider who boarded with a rider who did not
+c_pairs <- function(p, y) {
+  pairs <- expand.grid(event = which(y == 1), non_event = which(y == 0))
+  pairs$concordant <- ifelse(p[pairs$event] > p[pairs$non_event], 1,
+    ifelse(p[pairs$event] == p[pairs$non_event], 0.5, 0)
+  )
+  pairs
+}
+c_stat <- function(p, y) mean(c_pairs(p, y)$concordant)
+brier <- function(p, y) mean((p - y)^2)
+f2 <- function(x) {
+  x <- round(x, 2)
+  x[x == 0] <- 0 # no "−0.00"
+  sub("^-", "−", formatC(x, format = "f", digits = 2))
+}
+
+# ROC points: every threshold turns the model into a yes/no prediction
+roc_points <- function(p, y) {
+  th <- sort(unique(p), decreasing = TRUE)
+  r <- data.frame(
+    threshold = c(Inf, th),
+    tp = c(0, sapply(th, function(t) sum(p >= t & y == 1))),
+    fp = c(0, sapply(th, function(t) sum(p >= t & y == 0)))
+  )
+  r$tpr <- r$tp / sum(y == 1)
+  r$fpr <- r$fp / sum(y == 0)
+  r
+}
+
+# Time to boarding: riders reach the stop at 8:00 (minutes are in the riders table).
+# Bus 1 comes at 8:15 with room for three; bus 2 at 8:35. On a late day both are 15 minutes late.
+bus_times <- c(15, 35)
+delay <- 15
+horizon <- 20
+clock <- function(m) sprintf("8:%02d:%02d", floor(m), round((m %% 1) * 60))
+
+# Time version of the c statistic (Harrell's c): every pair of riders who boarded at
+# different times; concordant when the rider who boarded first had the higher prediction
+time_pairs <- function(p, time) {
+  ij <- t(combn(length(time), 2))
+  first <- ifelse(time[ij[, 1]] < time[ij[, 2]], ij[, 1], ij[, 2])
+  later <- ifelse(first == ij[, 1], ij[, 2], ij[, 1])
+  data.frame(first, later, concordant = (p[first] > p[later]) + 0.5 * (p[first] == p[later]))
+}
+
+# Pair grid: one cell per pair of riders (upper triangle, picture order).
+# The arrow points at the rider who got on (first): up = column rider, left = row rider.
+# Green arrow = what happened; black arrow = the model's pick.
+pair_grid <- function(models, outcome = c("binary", "time")) {
+  outcome <- match.arg(outcome)
+  n <- nrow(riders)
+  ij <- t(combn(n, 2))
+  i <- ij[, 1]
+  j <- ij[, 2]
+  if (outcome == "binary") {
+    compared <- riders$boarded[i] != riders$boarded[j]
+    truth <- ifelse(riders$boarded[i] == 1, i, j)
+  } else {
+    compared <- riders$minutes[i] != riders$minutes[j]
+    truth <- ifelse(riders$minutes[i] < riders$minutes[j], i, j)
+  }
+  cells <- do.call(rbind, lapply(names(models), function(m) {
+    p <- models[[m]]
+    pick <- ifelse(p[i] > p[j], i, ifelse(p[i] < p[j], j, NA))
+    score <- ifelse(is.na(pick), 0.5, as.numeric(pick == truth))
+    status <- ifelse(!compared, "not compared",
+      ifelse(is.na(pick), "tie", ifelse(pick == truth, "agree", "disagree")))
+    used <- score[compared]
+    data.frame(
+      model = paste0(m, "\nc = ", sum(used), "/", length(used), " = ", f2(mean(used))),
+      x = j - 1, y = n - i, status,
+      truth_arrow = ifelse(compared, ifelse(truth == i, "\u2190", "\u2191"), ""),
+      pick_arrow = ifelse(compared, ifelse(is.na(pick), "=", ifelse(pick == i, "\u2190", "\u2191")), "")
+    )
+  }))
+  cells$model <- factor(cells$model, levels = unique(cells$model))
+  ggplot(cells, aes(x, y)) +
+    geom_tile(aes(fill = status), colour = "white", linewidth = 2) +
+    geom_text(aes(x = x - 0.22, label = truth_arrow), colour = "#1b7a3a", size = 11, fontface = "bold") +
+    geom_text(aes(x = x + 0.22, label = pick_arrow), colour = "black", size = 11) +
+    facet_wrap(~model) +
+    scale_fill_manual(
+      values = c(agree = "#d6eedc", disagree = "#f6d3d3", tie = "#fbeec8", "not compared" = "#eeeeee"),
+      guide = "none"
+    ) +
+    scale_x_continuous(breaks = 1:(n - 1), labels = riders$rider[-1], position = "top", expand = c(0, 0)) +
+    scale_y_continuous(breaks = (n - 1):1, labels = riders$rider[-n], expand = c(0, 0)) +
+    coord_fixed() +
+    labs(x = NULL, y = NULL) +
+    theme_minimal(base_size = 22) +
+    theme(panel.grid = element_blank(), strip.text = element_text(size = 22, face = "bold"),
+      panel.spacing.x = unit(2, "lines"), strip.placement = "outside")
+}
+
+```
+
+## The bus stop
+
+```{r}
+#| output: asis
+# Picture: Agnes, Beatrice, Clara, Dorothy and Batman waiting for the bus.
+# Drop the finished file at calibration/images/bus-stop.png (or .jpg) to show it.
+img <- Sys.glob(c("images/bus-stop.png", "images/bus-stop.jpg"))
+if (length(img) > 0) {
+  cat("![Agnes, Beatrice, Clara, Dorothy and Batman waiting at a bus stop](", img[1], "){fig-alt=\"Four women and Batman on a bench in a bus shelter\" width=\"85%\"}\n", sep = "")
+  cat("\n[Illustration generated with Gemini, prompted by Doug Manuel. Batman is the property of DC Comics.]{.credit}\n")
+} else {
+  cat(
+    '::: {.image-placeholder}\n',
+    '**Image placeholder**\n\n',
+    'Four older women and Batman on a bench at a bus stop.\n\n',
+    'Left to right: Agnes, Beatrice, Clara, Dorothy, Batman\n',
+    ':::\n', sep = ""
+  )
+}
+```
+
+::: notes
+Who will get on the first bus? Who will let whom on?
+
+Batman is the polite superhero. Everyone in the class has just made a prediction.
+:::
+
+## From picture to data
+
+::: {.code-small}
+```{r}
+#| echo: true
+riders <- data.frame(
+  rider     = c("Agnes", "Beatrice", "Clara", "Dorothy", "Batman"),
+  age       = c(35, 80, 85, 80, 40),
+  cane      = c(0, 0, 1, 0, 0),
+  superhero = c(0, 0, 0, 0, 1),
+  boarded   = c(0, 1, 1, 1, 0), # got on the first bus
+  minutes   = c(35, 15.5, 15, 15.25, 35.25) # after 8:00
+)
+```
+:::
+
+The first bus has room for three. Observed: `r sum(riders$boarded)` of `r nrow(riders)` boarded, or **`r f2(mean(riders$boarded))`**.
+
+[`age`, `cane`, `superhero`: the **predictors** (in machine learning, *features*). `boarded`: the **outcome** (*label* or *target*).]{.defs}
+
+::: notes
+This is our database. Every later calculation uses these column names: riders$age, riders$boarded, and the model columns on the next slide. Beatrice and Dorothy are the same age.
+
+The order they got on: Clara first (she has the cane and the others let her on), then Dorothy, then Beatrice. The first bus is full. Agnes, the youngest, and Batman, the polite superhero, wait for the next bus. We use the minutes later.
+:::
+
+## Two models
+
+$$
+\text{logit}(p) = \beta_0 + \beta_1 \tfrac{\text{age} - 60}{10} + \beta_2\,\text{cane} + \beta_3\,\text{superhero}
+$$
+
+[$p$: probability of boarding the first bus. $\text{logit}(p) = \log\frac{p}{1 - p}$, the log-odds. Each $\beta$ is a coefficient (*weight*; $\beta_0$ is the *bias*). `plogis()` turns log-odds back into a probability (the *sigmoid* function).]{.defs}
+
+```{r}
+coef_a <- c(2.0, 0.1, 1.0, -1.0)
+coef_b <- c(0.0, 0.1, 0.0, 2.5)
+lp <- function(b) b[1] + b[2] * (riders$age - 60) / 10 + b[3] * riders$cane + b[4] * riders$superhero
+riders$model_a <- plogis(lp(coef_a))
+riders$model_b <- plogis(lp(coef_b))
+fmt_coef <- function(b) sub("^-", "−", formatC(b, format = "f", digits = 1))
+```
+
+::: columns
+::: {.column width="42%"}
+```{r}
+kable(
+  data.frame(
+    c("$\\beta_0$ intercept", "$\\beta_1$ age", "$\\beta_2$ cane", "$\\beta_3$ superhero"),
+    fmt_coef(coef_a), fmt_coef(coef_b)
+  ),
+  col.names = c("", "Model A", "Model B"), align = "lcc", escape = FALSE
+)
+```
+:::
+
+::: {.column width="58%"}
+```{r}
+kable(
+  data.frame(riders$rider, riders$boarded, f2(riders$model_a), f2(riders$model_b)),
+  col.names = c("`rider`", "`boarded`", "`model_a`", "`model_b`"), align = "lccc"
+)
+```
+:::
+:::
+
+::: fragment
+**Which model is better?**
+:::
+
+::: notes
+Model A knows the cane helps and that superheroes wait, but its intercept is too high: it thinks everyone is likely to board. Model B ignores the cane and thinks superheroes push to the front. Beatrice and Dorothy are the same age, so each model gives them the same probability: a tie.
+
+Ask the class to vote before going on.
+:::
+
+```{r}
+#| label: derived
+y <- riders$boarded
+obs <- mean(y)
+pa <- c_pairs(riders$model_a, y)
+pb <- c_pairs(riders$model_b, y)
+
+# Calibration-in-the-large: logistic regression with the model's log-odds as an offset
+fit_a <- glm(boarded ~ 1, offset = qlogis(model_a), family = binomial, data = riders)
+shift_a <- coef(fit_a)[[1]]
+riders$model_a_recal <- plogis(qlogis(riders$model_a) + shift_a)
+```
+
+## {.center}
+
+::: columns
+::: {.column width="50%"}
+### Discrimination
+
+**Who** gets on the bus first?
+
+::: fragment
+How well the predictions differentiate between individuals with and without the outcome.
+:::
+:::
+
+::: {.column width="50%"}
+### Calibration
+
+**When** do they get on the bus?
+
+::: fragment
+Agreement between observed outcomes and estimated values from the model.
+:::
+:::
+:::
+
+::: footer
+TRIPOD+AI. *BMJ* 2024;385. doi:10.1136/bmj-2023-078378
+:::
+
+::: notes
+Discrimination is about ranking: does the model put people in the right order? Calibration is about whether the predicted values match what is observed. Discrimination is usually quantified by the c statistic (also called AUC or AUROC for binary outcomes). Today we put numbers on both, using the bus stop.
+:::
+
+# Discrimination
+
+## The c statistic counts pairs
+
+Pair each rider who boarded with each rider who did not: `r sum(y)` × `r sum(1 - y)` = `r nrow(pa)` pairs. The c statistic is also called the concordance statistic, and in machine learning the *AUC*.
+
+A pair is **concordant** when the model gives the rider who boarded the higher probability.
+
+$$
+c = \frac{\text{concordant pairs} + \tfrac{1}{2}\,\text{tied pairs}}{\text{all pairs}}
+$$
+
+- $c = 1$: perfect ranking
+- $c = 0.5$: no better than a coin toss
+
+::: notes
+For a binary outcome the c statistic equals the area under the ROC curve. Counting pairs is the same quantity, and it is easier to see what it means. We come back to the ROC in a few slides.
+:::
+
+## Model A ranks perfectly; Model B is a coin toss
+
+```{r}
+#| fig-width: 13
+#| fig-height: 6
+#| out-width: "100%"
+pair_grid(list("Model A" = riders$model_a, "Model B" = riders$model_b), "binary")
+```
+
+[**Green arrow**: who got on. **Black arrow**: the model's pick (higher probability). Arrows point at the rider: ↑ column, ← row. Grey: both got on, or both waited, so not compared.]{.small}
+
+::: notes
+Read one cell first: Agnes and Beatrice. Beatrice got on, so the green arrow points up at her. Model A gives Beatrice `r f2(riders$model_a[2])` and Agnes `r f2(riders$model_a[1])`, so its black arrow also points up: they agree, the cell is green. Count the green cells and divide by the cells that are not grey: that is c. Model B's whole Batman column is red: it is sure Batman will board, and he waits.
+:::
+
+## Worked by hand
+
+Each pair scores 1 if the model ranks the rider who boarded higher, ½ if tied, 0 if not. Then average.
+
+$$
+c_A = \frac{`r paste(pa$concordant, collapse = " + ")`}{`r nrow(pa)`}
+    = \frac{`r sum(pa$concordant)`}{`r nrow(pa)`}
+    = {\color{#1b7a3a}\mathbf{`r f2(c_stat(riders$model_a, y))`}}
+$$
+
+$$
+c_B = \frac{`r paste(pb$concordant, collapse = " + ")`}{`r nrow(pb)`}
+    = \frac{`r sum(pb$concordant)`}{`r nrow(pb)`}
+    = {\color{#b03030}\mathbf{`r f2(c_stat(riders$model_b, y))`}}
+$$
+
+::: notes
+Walk through one pair on the previous slide (for example Dorothy, who boarded, against Agnes, who did not), then show that the sum is just the column of ticks and crosses added up. Model B's misses are the pairs that include Batman, whom it is sure will board.
+:::
+
+## The same count in R
+
+```{r}
+#| echo: true
+#| code-line-numbers: "1|2-5|6-7|8"
+p <- riders$model_b # try model_a too
+pairs <- expand.grid(
+  boarded = which(riders$boarded == 1),
+  waited = which(riders$boarded == 0)
+)
+better <- p[pairs$boarded] > p[pairs$waited]
+tied <- p[pairs$boarded] == p[pairs$waited]
+mean(better + 0.5 * tied)
+```
+
+::: notes
+Line by line: choose the model, build every boarded and not-boarded pairing, flag the pairs ranked correctly and the ties, then average with ties counting half. This is the same number as the hand calculation.
+:::
+
+## From pairs to a curve: the ROC
+
+Pick a threshold $t$ and predict "boards" for anyone with $p \ge t$. Every threshold gives a different yes/no prediction:
+
+$$
+\text{sensitivity} = \frac{TP}{\text{boarded } (`r sum(y)`)}
+\qquad
+1 - \text{specificity} = \frac{FP}{\text{waited } (`r sum(1 - y)`)}
+$$
+
+[Model B. $TP$, true positives: predicted to board, and did. $FP$, false positives: predicted to board, but waited. Machine learning calls sensitivity *recall* or the *true positive rate*, and 1 − specificity the *false positive rate*.]{.defs}
+
+```{r}
+rb <- roc_points(riders$model_b, y)
+kable(
+  data.frame(
+    c("none", paste("≥", f2(rb$threshold[-1]))),
+    rb$tp, rb$fp, f2(rb$tpr), f2(rb$fpr)
+  ),
+  col.names = c("Predict boards if p", "TP", "FP", "Sensitivity", "1 − specificity"),
+  align = "lcccc"
+)
+```
+
+::: notes
+The table is for Model B. Lowering the threshold moves the curve up for each rider who boarded and right for each who waited.
+:::
+
+## ROC curves for Models A and B
+
+```{r}
+#| fig-width: 11
+#| fig-height: 5.5
+#| out-width: "100%"
+ra <- roc_points(riders$model_a, y)
+auc <- function(r) sum(diff(r$fpr) * (head(r$tpr, -1) + tail(r$tpr, -1)) / 2)
+roc_dat <- rbind(
+  transform(ra, model = "Model A", panel = paste0("Model A (area = ", f2(auc(ra)), ")")),
+  transform(rb, model = "Model B", panel = paste0("Model B (area = ", f2(auc(rb)), ")"))
+)
+ggplot(roc_dat, aes(fpr, tpr, colour = model)) +
+  geom_abline(linetype = "dashed", colour = "grey50") +
+  geom_path(linewidth = 1.6) +
+  geom_point(size = 4) +
+  facet_wrap(~panel) +
+  scale_colour_manual(values = c("Model A" = "#1b7a3a", "Model B" = "#b03030"), guide = "none") +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  labs(x = "1 − specificity", y = "Sensitivity") +
+  theme_minimal(base_size = 22) +
+  theme(panel.spacing.x = unit(2.5, "lines"))
+```
+
+The dashed diagonal is a coin toss.
+
+## The area under the curve is the c statistic
+
+Add up the trapezoids: each step adds width × average height, $\Delta x \times \tfrac{1}{2}(\text{sens}_{k-1} + \text{sens}_k)$.
+
+[$\Delta x$: the step in 1 − specificity. $\text{sens}_k$: sensitivity at threshold $k$.]{.defs}
+
+```{r}
+terms_b <- diff(rb$fpr) * (head(rb$tpr, -1) + tail(rb$tpr, -1)) / 2
+```
+
+$$
+\text{area}_B = `r paste(f2(terms_b), collapse = " + ")` = {\color{#b03030}\mathbf{`r f2(sum(terms_b))`}}
+$$
+
+The same number as counting pairs: $c_B$ = `r f2(c_stat(riders$model_b, y))`.
+
+```{r}
+#| echo: true
+# rb: the ROC table from two slides back
+rb <- roc_points(riders$model_b, riders$boarded)
+dx <- diff(rb$fpr)
+height <- (head(rb$tpr, -1) + tail(rb$tpr, -1)) / 2
+sum(dx * height)
+```
+
+::: notes
+Two routes to the same quantity: count the correctly ranked pairs, or integrate the ROC curve. For a binary outcome they are identical, and ties get half credit either way.
+:::
+
+## A word of caution about the ROC
+
+- The ROC curve is everywhere in machine learning. In medicine it is debated.
+- It summarises ranking over **every** threshold, including thresholds nobody would use.
+- It ignores calibration. Model A has c = `r f2(c_stat(riders$model_a, y))` but predicts `r f2(mean(riders$model_a))` on average when `r f2(obs)` boarded.
+- It ignores the costs of false positives and false negatives at the threshold you actually choose.
+- Report it alongside a calibration plot, and a decision-focused measure such as net benefit (the good done by true positives minus the harm of false positives, at the threshold you use).
+
+::: notes
+Keep this short. The point is that a high c alone does not make a model useful, which is why the next section is about calibration.
+:::
+
+# Calibration
+
+## Calibration-in-the-large: compare the averages
+
+```{r}
+# Hand calculations use the two-decimal values shown on the slides
+r2 <- function(x) round(x, 2)
+e_a <- r2(sum(r2(riders$model_a))) / nrow(riders)
+e_b <- r2(sum(r2(riders$model_b))) / nrow(riders)
+```
+
+$$
+O = \frac{1}{N}\sum_{i=1}^{N} y_i \qquad E = \frac{1}{N}\sum_{i=1}^{N} p_i
+$$
+
+[**O**, observed: the share who boarded. **E**, expected: the average predicted probability. $N$ = `r nrow(riders)` riders. $y_i$: rider $i$'s `boarded` (1 = got on, 0 = waited). $p_i$: rider $i$'s predicted probability (`model_a` or `model_b`).]{.defs}
+
+$$
+O = \frac{`r paste(riders$boarded, collapse = " + ")`}{`r nrow(riders)`} = `r f2(obs)`
+$$
+
+$$
+E_A = \frac{`r paste(f2(riders$model_a), collapse = " + ")`}{`r nrow(riders)`} = \frac{`r f2(sum(r2(riders$model_a)))`}{`r nrow(riders)`} = `r f2(e_a)`
+$$
+
+$$
+E_B = \frac{`r paste(f2(riders$model_b), collapse = " + ")`}{`r nrow(riders)`} = \frac{`r f2(sum(r2(riders$model_b)))`}{`r nrow(riders)`} = `r f2(e_b)`
+$$
+
+::: notes
+Calibration-in-the-large only checks the average. Model B matches on average, yet its predictions for individual riders are poor. Seeing calibration across the range of risk needs a calibration plot, and that needs more than five riders.
+:::
+
+## Observed against predicted
+
+$$
+\text{O/E}_A = \frac{`r f2(obs)`}{`r f2(e_a)`} = `r f2(obs / e_a)`
+\qquad
+\text{O/E}_B = \frac{`r f2(obs)`}{`r f2(e_b)`} = `r f2(obs / e_b)`
+$$
+
+```{r}
+#| fig-width: 11
+#| fig-height: 4.2
+#| out-width: "80%"
+oe_dat <- data.frame(
+  model = rep(c("Model A", "Model B"), each = 2),
+  what = factor(rep(c("Observed", "Mean predicted"), 2), levels = c("Observed", "Mean predicted")),
+  value = c(obs, mean(riders$model_a), obs, mean(riders$model_b))
+)
+oe_lab <- data.frame(
+  model = c("Model A", "Model B"),
+  label = paste0("O/E = ", f2(obs / c(mean(riders$model_a), mean(riders$model_b))))
+)
+ggplot(oe_dat, aes(model, value, fill = what)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_text(aes(label = f2(value)), position = position_dodge(width = 0.8), vjust = -0.4, size = 7) +
+  geom_text(data = oe_lab, aes(model, 1.08, label = label), inherit.aes = FALSE, size = 7, fontface = "bold") +
+  scale_fill_manual(values = c("Observed" = "#9aa5b1", "Mean predicted" = "#2a6ab0"), name = NULL) +
+  scale_y_continuous(limits = c(0, 1.15), breaks = seq(0, 1, 0.25)) +
+  labs(x = NULL, y = "Proportion boarding") +
+  theme_minimal(base_size = 22) +
+  theme(legend.position = "top", panel.grid.major.x = element_blank(), panel.grid.minor = element_blank())
+```
+
+Model A over-predicts by `r sprintf("%.0f%%", 100 * (e_a - obs) / obs)`: "much higher" (more than 20%) on the scale used to judge the Framingham equations in Canada.
+
+::: notes
+Grey is what happened: `r sum(riders$boarded)` of `r nrow(riders)` boarded. Blue is what each model expected on average. Model A's bar is too tall: it over-predicts. Model B's bars match, even though its ranking is poor. Calibration-in-the-large only checks the average.
+:::
+
+## Brier score: average squared error
+
+$$
+\text{Brier} = \frac{1}{N}\sum_{i=1}^{N} (p_i - y_i)^2
+$$
+
+[$p_i$: predicted probability (`model_a`, `model_b`). $y_i$: `boarded`, 1 or 0. $N$ = `r nrow(riders)` riders. In machine learning, the Brier score is the *mean squared error* of the probabilities.]{.defs}
+
+```{r}
+# Hand calculation with the two-decimal predictions shown on the slides
+sq2 <- function(p) round((round(p, 2) - y)^2, 2)
+sq_a <- sq2(riders$model_a)
+sq_b <- sq2(riders$model_b)
+cell <- function(p, sq) paste0("(", f2(round(p, 2)), " − ", y, ")² = ", f2(sq))
+brier_row <- function(sq) paste0("**Brier = ", f2(sum(sq)), " / ", nrow(riders), " = ", f2(sum(sq) / nrow(riders)), "**")
+kable(
+  data.frame(
+    c(riders$rider, ""), c(y, ""),
+    c(cell(riders$model_a, sq_a), brier_row(sq_a)),
+    c(cell(riders$model_b, sq_b), brier_row(sq_b))
+  ),
+  col.names = c("`rider`", "`boarded`", "Model A", "Model B"),
+  align = "lccc"
+)
+```
+
+::: notes
+Each cell is one rider: the prediction from the "Two models" slide, minus what happened, squared. 0 is perfect. Predicting `r f2(obs)` for everyone gives `r f2(brier(rep(obs, 5), y))`, so Model A, at `r f2(sum(sq_a) / nrow(riders))`, is no better than knowing only the average.
+:::
+
+## Picturing the Brier score
+
+```{r}
+#| fig-width: 13
+#| fig-height: 6
+#| out-width: "100%"
+brier_dat <- do.call(rbind, lapply(c("Model A", "Model B"), function(m) {
+  p <- if (m == "Model A") riders$model_a else riders$model_b
+  data.frame(
+    model = paste0(m, ": Brier = ", f2(mean((p - y)^2))),
+    rider = factor(riders$rider, levels = riders$rider), p, y,
+    label = f2(round((round(p, 2) - y)^2, 2))
+  )
+}))
+ggplot(brier_dat, aes(rider)) +
+  geom_segment(aes(xend = rider, y = p, yend = y), colour = "#b03030", linewidth = 2) +
+  geom_point(aes(y = y), shape = 21, size = 6, stroke = 1.5, fill = "white") +
+  geom_point(aes(y = p), size = 6, colour = "#2a6ab0") +
+  geom_text(aes(y = -0.15, label = label), size = 6.5, colour = "#b03030") +
+  facet_wrap(~model) +
+  scale_y_continuous(limits = c(-0.25, 1.05), breaks = seq(0, 1, 0.25)) +
+  labs(x = NULL, y = "Probability of boarding") +
+  theme_minimal(base_size = 22) +
+  theme(panel.grid.minor = element_blank(), panel.grid.major.x = element_blank(),
+    axis.text.x = element_text(angle = 30, hjust = 1),
+    strip.text = element_text(size = 22, face = "bold"), panel.spacing.x = unit(2, "lines"))
+```
+
+[**Blue**: the prediction. **White**: what happened (1 = boarded, 0 = waited). The red line is the error; the number under each rider is its square. Average the squares.]{.small}
+
+::: notes
+Each red line is one rider's error. Squaring makes the long lines count much more: Model B's line for Batman alone is `r f2((riders$model_b[5] - y[5])^2)`, more than any of Model A's. Model A's lines are short for the riders who boarded and long for Agnes and Batman, because it thinks everyone boards.
+:::
+
+## The Brier score mixes both problems
+
+::: columns
+::: {.column width="50%"}
+**Model A**
+
+Perfect ranking (c = `r f2(c_stat(riders$model_a, y))`), yet a Brier score of `r f2(brier(riders$model_a, y))`, no better than predicting `r f2(obs)` for everyone
+:::
+
+::: {.column width="50%"}
+**Model B**
+
+Right on average (O/E = `r f2(obs / mean(riders$model_b))`), yet a Brier score of `r f2(brier(riders$model_b, y))`, worse still
+:::
+:::
+
+::: fragment
+One number cannot tell you *which* problem a model has. Report discrimination and calibration separately (TRIPOD+AI).
+:::
+
+
+## F1 and accuracy mix them too
+
+Machine learning often scores a model at a threshold: predict "boards" if $p \ge `r f2(0.5)`$.
+
+```{r}
+thr <- 0.5
+cls <- function(p) {
+  pred <- round(p, 2) >= thr
+  tp <- sum(pred & y == 1); fp <- sum(pred & y == 0)
+  fn <- sum(!pred & y == 1); tn <- sum(!pred & y == 0)
+  prec <- tp / (tp + fp); rec <- tp / (tp + fn)
+  c(tp = tp, fp = fp, fn = fn, tn = tn, precision = prec, recall = rec,
+    f1 = 2 * prec * rec / (prec + rec), accuracy = (tp + tn) / length(y))
+}
+ca <- cls(riders$model_a)
+cb <- cls(riders$model_b)
+kable(
+  data.frame(
+    c("Precision (PPV) = TP / (TP + FP)", "Recall (sensitivity) = TP / (TP + FN)", "**F1**", "Accuracy = (TP + TN) / N", "c statistic", "O/E"),
+    c(paste0(ca[["tp"]], " / ", ca[["tp"]] + ca[["fp"]], " = ", f2(ca[["precision"]])),
+      paste0(ca[["tp"]], " / ", ca[["tp"]] + ca[["fn"]], " = ", f2(ca[["recall"]])),
+      paste0("**", f2(ca[["f1"]]), "**"), f2(ca[["accuracy"]]),
+      f2(c_stat(riders$model_a, y)), f2(obs / mean(riders$model_a))),
+    c(paste0(cb[["tp"]], " / ", cb[["tp"]] + cb[["fp"]], " = ", f2(cb[["precision"]])),
+      paste0(cb[["tp"]], " / ", cb[["tp"]] + cb[["fn"]], " = ", f2(cb[["recall"]])),
+      paste0("**", f2(cb[["f1"]]), "**"), f2(cb[["accuracy"]]),
+      f2(c_stat(riders$model_b, y)), f2(obs / mean(riders$model_b)))
+  ),
+  col.names = c("", "Model A", "Model B"), align = "lcc"
+)
+```
+
+[F1 $= \dfrac{2 \times \text{precision} \times \text{recall}}{\text{precision} + \text{recall}}$. Precision is the positive predictive value (PPV): the share of predicted boarders who boarded. Recall is sensitivity. TN, true negatives: predicted to wait, and did.]{.defs}
+
+::: fragment
+By F1, the coin-toss model wins.
+:::
+
+::: notes
+Model A puts everyone above 0.5, so it predicts that all five board: precision `r f2(ca[["precision"]])`, recall `r f2(ca[["recall"]])`. Model B predicts everyone but Agnes boards, including Batman. F1 depends on the ranking, on where the predictions sit relative to the threshold (calibration), on the threshold itself and on how common the outcome is, and it ignores true negatives. So a single F1 cannot tell you which problem a model has. After recalibration, Model A's F1 at 0.5 becomes `r f2(cls(riders$model_a_recal)[["f1"]])` with c unchanged at `r f2(c_stat(riders$model_a_recal, y))`. In health and medicine, report discrimination and calibration separately, and judge thresholds by their clinical consequences (net benefit).
+:::
+
+# Recalibration
+
+## Recalibrate Model A: shift the log-odds
+
+$$
+\text{logit}(p_i^{*}) = \text{logit}(p_i) + a
+$$
+
+Estimate $a$ with a logistic regression that has $\text{logit}(p_i)$ as an offset: $a$ = `r f2(shift_a)`
+
+[$p_i^{*}$: rider $i$'s recalibrated probability. $a$: one shift, the same for every rider. An offset keeps $\text{logit}(p_i)$ fixed, so only $a$ is estimated.]{.defs}
+
+```{r}
+kable(
+  data.frame(
+    c("Mean predicted", "c statistic", "Brier score"),
+    c(f2(mean(riders$model_a)), f2(c_stat(riders$model_a, y)), f2(brier(riders$model_a, y))),
+    c(
+      f2(mean(riders$model_a_recal)), f2(c_stat(riders$model_a_recal, y)),
+      f2(brier(riders$model_a_recal, y))
+    )
+  ),
+  col.names = c("", "Model A", "Model A recalibrated"), align = "lcc"
+)
+```
+
+::: notes
+Recalibrated predictions: `r paste(riders$rider, f2(riders$model_a_recal), sep = " ", collapse = "; ")`.
+:::
+
+## Recalibration cannot fix discrimination
+
+```{r}
+#| fig-width: 13
+#| fig-height: 6
+#| out-width: "100%"
+pair_grid(list("Model A" = riders$model_a, "Recalibrated A" = riders$model_a_recal), "binary")
+```
+
+Same constant added to every log-odds: same **order**, same arrows. Model A can be **repaired**; Model B needs **new coefficients**, a new model.
+
+::: notes
+The probabilities change (`r f2(mean(riders$model_a))` on average becomes `r f2(mean(riders$model_a_recal))`), but no black arrow moves. Recalibration cannot turn a red cell green. In the formula, recalibration only changes Model A's intercept, from `r fmt_coef(coef_a[1])` to `r f2(coef_a[1] + shift_a)`.
+:::
+
+# When do they get on?
+
+```{r}
+#| label: time-setup
+boarding_order <- riders$rider[order(riders$minutes)]
+days <- rbind(
+  data.frame(day = "On time", rider = riders$rider, minutes = riders$minutes),
+  data.frame(day = "15 minutes late", rider = riders$rider, minutes = riders$minutes + delay)
+)
+days$day <- factor(days$day, levels = c("On time", "15 minutes late"))
+days$rider <- factor(days$rider, levels = rev(boarding_order))
+buses <- data.frame(
+  day = factor(rep(levels(days$day), each = 2), levels = levels(days$day)),
+  minutes = c(bus_times, bus_times + delay),
+  label = rep(c("Bus 1 (3 seats)", "Bus 2"), 2)
+)
+timeline <- function(which_days) {
+  d <- days[days$day %in% which_days, ]
+  b <- buses[buses$day %in% which_days, ]
+  ggplot(d, aes(minutes, rider)) +
+    geom_vline(data = b, aes(xintercept = minutes), linetype = "dashed", colour = "grey50") +
+    geom_label(data = b, aes(x = minutes, y = Inf, label = label),
+      vjust = 1, size = 5.5, label.size = 0, fill = "white", inherit.aes = FALSE) +
+    geom_point(size = 5, colour = "#2a6ab0") +
+    geom_text(aes(label = clock(minutes)), hjust = -0.25, size = 5.5) +
+    facet_wrap(~day, ncol = 1) +
+    scale_x_continuous(limits = c(0, 62), breaks = seq(0, 60, 10),
+      labels = function(m) sprintf("%d:%02d", 8 + m %/% 60, m %% 60)) +
+    scale_y_discrete(expand = expansion(add = c(0.6, 1.4))) +
+    labs(x = NULL, y = NULL) +
+    theme_minimal(base_size = 22) +
+    theme(panel.grid.minor = element_blank())
+}
+ta <- time_pairs(riders$model_a, riders$minutes)
+
+# Cox version of Model A: same slopes, no intercept; the baseline S0(t) takes its place.
+# S0(8:20) is set so the average prediction matches the on-time day (shown to two decimals,
+# and the two-decimal value is used so the hand calculation matches).
+riders$lp_time <- coef_a[2] * (riders$age - 60) / 10 + coef_a[3] * riders$cane + coef_a[4] * riders$superhero
+on_board_obs <- mean(riders$minutes <= horizon)
+s0 <- round(uniroot(function(s) mean(1 - s^exp(riders$lp_time)) - on_board_obs, c(0.01, 0.99))$root, 2)
+riders$cox_a <- 1 - s0^exp(riders$lp_time)
+tb <- time_pairs(riders$model_b, riders$minutes)
+c_time <- function(tp) mean(tp$concordant)
+```
+
+## Boarding times
+
+```{r}
+#| fig-width: 11
+#| fig-height: 5
+#| out-width: "100%"
+timeline("On time")
+```
+
+Everyone reaches the stop at 8:00. Order of boarding: `r paste(boarding_order, collapse = ", ")`.
+
+::: notes
+These times are made up. Clara gets on first, Dorothy 15 seconds later, then Beatrice. The bus is full, so Agnes and Batman take the second bus. Most medical prediction models are like this: the outcome is the time to an event.
+:::
+
+## A model for time {.center}
+
+$$
+h_i(t) = h_0(t)\,\exp(\text{lp}_i)
+$$
+
+$$
+\text{lp}_i = 0.1\,\tfrac{\text{age} - 60}{10} + 1.0\,\text{cane} - 1.0\,\text{superhero}
+$$
+
+$$
+S_i(t) = S_0(t)^{\exp(\text{lp}_i)} \qquad P_i(\text{on a bus by } t) = 1 - S_i(t)
+$$
+
+[$\text{lp}_i$: the **linear predictor**, the weighted sum of rider $i$'s predictors (Model A's slopes, no intercept). $h_i(t)$: rider $i$'s hazard, the chance of boarding in the next moment if still waiting. $h_0(t)$: the baseline hazard. $\exp(\text{lp}_i)$: the hazard ratio. $S_i(t)$: the chance rider $i$ is still waiting at time $t$. $S_0(t)$: the **baseline survival**, the chance a rider with $\text{lp} = 0$ is still waiting at $t$.]{.defs}
+
+::: {.spaced}
+The same slopes as Model A, but **no intercept**: the baseline takes its place.
+:::
+
+## Predictions for 8:`r horizon`
+
+$S_0(\text{8:`r horizon`}) = `r f2(s0)`$, set so the average prediction matches the on-time day, so $P_i(\text{on a bus by 8:`r horizon`}) = 1 - `r f2(s0)`^{\exp(\text{lp}_i)}$.
+
+```{r}
+kable(
+  data.frame(
+    riders$rider,
+    sub("^-", "−", formatC(riders$lp_time, format = "f", digits = 2)),
+    f2(exp(riders$lp_time)),
+    f2(riders$cox_a)
+  ),
+  col.names = c("`rider`", "lp", "exp(lp)", "On a bus by 8:20"), align = "lccc"
+)
+```
+
+Clara: $1 - `r f2(s0)`^{`r f2(exp(riders$lp_time[3]))`} = `r f2(riders$cox_a[3])`$
+
+::: notes
+This is the Cox proportional hazards model, the usual model for time to an event. Same predictors and slopes as Model A, so the same order. There is no intercept: the baseline takes its place. S0(8:20) = `r f2(s0)` is set so that the average prediction, `r f2(mean(riders$cox_a))`, matches the `r f2(on_board_obs)` on board by 8:20 on an on-time day.
+:::
+
+## With time: who got on first?
+
+```{r}
+#| fig-width: 13
+#| fig-height: 6
+#| out-width: "100%"
+pair_grid(list("Model A" = riders$model_a, "Model B" = riders$model_b), "time")
+```
+
+[**Green arrow**: who got on first. **Black arrow**: the model's pick. Everyone boarded at a different time, so no cell is grey.]{.small}
+
+::: notes
+Same grid as before, now with time. The grey cells are filled in: Clara against Dorothy, Agnes against Batman, and so on. Model A agrees everywhere except Beatrice against Dorothy: same age, same probability, so that pair scores half. This is why we only score pairs with different outcomes: with the yes-or-no outcome Beatrice and Dorothy both boarded, so their tie never counted. Model B gets every pair with Batman wrong, and ties Beatrice and Dorothy too.
+:::
+
+## With time, every pair counts
+
+Any two riders who boarded at different times make a pair: `r nrow(ta)` pairs, not `r nrow(pa)`. A pair is concordant when the rider who boarded **first** had the higher predicted probability.
+
+$$
+c_A = \frac{`r paste(ta$concordant, collapse = " + ")`}{`r nrow(ta)`}
+    = {\color{#1b7a3a}\mathbf{`r f2(c_time(ta))`}}
+$$
+
+$$
+c_B = \frac{`r paste(tb$concordant, collapse = " + ")`}{`r nrow(tb)`}
+    = {\color{#b03030}\mathbf{`r f2(c_time(tb))`}}
+$$
+
+Model A goes from `r f2(c_stat(riders$model_a, y))` to `r f2(c_time(ta))` and Model B from `r f2(c_stat(riders$model_b, y))` to `r f2(c_time(tb))`: time also checks the order **within** the riders who boarded and within those who waited, and a tie there scores ½.
+
+::: notes
+This is Harrell's c, the usual c statistic for survival models. With yes-or-no outcomes we only compared boarders with non-boarders. With times we can also ask whether the model knew Clara would beat Dorothy, and Agnes would beat Batman. If someone were still waiting when we stopped watching (censored), pairs would only count when the earlier rider actually boarded.
+:::
+
+## The same count in R, with time
+
+```{r}
+#| echo: true
+#| code-line-numbers: "1|2-3|4-7|8"
+library(survival)
+riders$event <- 1 # everyone boards eventually
+fit <- concordance(
+  Surv(minutes, event) ~ model_b,
+  data = riders,
+  reverse = TRUE # higher p = earlier boarding
+)
+fit$concordance
+```
+
+::: notes
+`Surv()` pairs each time with whether the event happened. `reverse = TRUE` tells R that a higher predicted probability should go with a shorter time. The answer matches the hand count.
+:::
+
+## Rank order: the same pairs, without the clock
+
+```{r}
+#| fig-width: 13
+#| fig-height: 5.6
+#| out-width: "100%"
+rank_dat <- do.call(rbind, lapply(c("Model A", "Model B"), function(m) {
+  p <- if (m == "Model A") riders$model_a else riders$model_b
+  data.frame(
+    model = m, rider = riders$rider,
+    observed = rank(riders$minutes),
+    predicted = rank(-round(p, 2), ties.method = "average")
+  )
+}))
+ord <- c("1st", "2nd", "3rd", "4th", "5th")
+ggplot(rank_dat) +
+  geom_segment(aes(x = 0, xend = 1, y = observed, yend = predicted), colour = "#2a6ab0", linewidth = 1.5) +
+  geom_point(aes(x = 0, y = observed), size = 4, colour = "#2a6ab0") +
+  geom_point(aes(x = 1, y = predicted), size = 4, colour = "#2a6ab0") +
+  geom_text(aes(x = -0.06, y = observed, label = rider), hjust = 1, size = 6.5) +
+  geom_text(aes(x = 1.06, y = predicted, label = rider), hjust = 0, size = 6.5,
+    data = function(d) d[!(d$rider == "Beatrice" & d$predicted %% 1 != 0), ]) +
+  geom_text(aes(x = 1.06, y = predicted + 0.32, label = rider), hjust = 0, size = 6.5,
+    data = function(d) d[d$rider == "Beatrice" & d$predicted %% 1 != 0, ]) +
+  facet_wrap(~model) +
+  scale_y_reverse(breaks = 1:5, labels = ord) +
+  scale_x_continuous(breaks = c(0, 1), labels = c("Got on", "Model's order"), limits = c(-0.55, 1.55)) +
+  labs(x = NULL, y = NULL) +
+  theme_minimal(base_size = 22) +
+  theme(panel.grid = element_blank(), strip.text = element_text(size = 22, face = "bold"),
+    panel.spacing.x = unit(3, "lines"))
+```
+
+[Left: the order they got on. Right: the order the model predicted. **Each crossing is a pair the model got backwards**; lines that meet are a tie.]{.small}
+
+::: notes
+Ranks only, no clock. Model A's lines never cross; Beatrice and Dorothy meet because the model gives them the same probability. Model B's Batman line crosses all four others: the model puts him first, and he got on last.
+:::
+
+## Somers' D: right minus wrong
+
+$$
+D = \frac{\text{concordant} - \text{discordant}}{\text{all pairs}} = 2c - 1
+$$
+
+```{r}
+pair_counts <- function(tp) c(con = sum(tp$concordant == 1), dis = sum(tp$concordant == 0), tie = sum(tp$concordant == 0.5))
+ka <- pair_counts(ta)
+kb <- pair_counts(tb)
+```
+
+$$
+D_A = \frac{`r ka[["con"]]` - `r ka[["dis"]]`}{`r nrow(ta)`} = `r f2((ka[["con"]] - ka[["dis"]]) / nrow(ta))`
+\qquad
+D_B = \frac{`r kb[["con"]]` - `r kb[["dis"]]`}{`r nrow(tb)`} = `r f2((kb[["con"]] - kb[["dis"]]) / nrow(tb))`
+$$
+
+```{r}
+kable(
+  data.frame(
+    c("c statistic (AUC)", "Somers' D = 2c − 1"),
+    c("0.50", "0.00"), c("1.00", "1.00"),
+    c(f2(c_time(ta)), f2(2 * c_time(ta) - 1)),
+    c(f2(c_time(tb)), f2(2 * c_time(tb) - 1))
+  ),
+  col.names = c("", "Coin toss", "Perfect", "Model A", "Model B"), align = "lcccc"
+)
+```
+
+[Ties count in "all pairs" but neither add nor subtract. In machine learning, 2 × AUC − 1 is called the **Gini coefficient**: the same quantity. A ranking has no probabilities, so there is nothing to calibrate.]{.defs}
+
+::: notes
+c and Somers' D carry the same information on different scales. c runs from 0.5 (coin toss) to 1 (perfect); Somers' D runs from 0 to 1, and down to −1 for a model that ranks everyone exactly backwards. Model A: `r ka[["con"]]` right, `r ka[["dis"]]` wrong, `r ka[["tie"]]` tie. Model B: `r kb[["con"]]` right, `r kb[["dis"]]` wrong (all the pairs with Batman), `r kb[["tie"]]` tie. Rank-order outcomes are common in machine learning (search, recommendation) and often neglected in medicine.
+:::
+
+## The bus is 15 minutes late
+
+```{r}
+#| fig-width: 13
+#| fig-height: 6.5
+#| out-width: "100%"
+timeline(c("On time", "15 minutes late"))
+```
+
+Same riders, same order. Every boarding is `r delay` minutes later.
+
+## Same ranking, broken calibration
+
+The Cox model's predictions for 8:`r horizon` do not change: same riders, same order.
+
+```{r}
+#| fig-width: 11
+#| fig-height: 5
+#| out-width: "85%"
+on_board <- function(m) mean(m <= horizon)
+p_cox <- riders$cox_a
+late_min <- riders$minutes + delay
+days_lab <- c("On time", "15 minutes late")
+obs_day <- c(on_board(riders$minutes), on_board(late_min))
+late_dat <- data.frame(
+  day = factor(rep(days_lab, each = 2), levels = days_lab),
+  what = factor(rep(c("Observed", "Mean predicted"), 2), levels = c("Observed", "Mean predicted")),
+  value = c(obs_day[1], mean(p_cox), obs_day[2], mean(p_cox))
+)
+late_lab <- data.frame(
+  day = factor(days_lab, levels = days_lab),
+  label = paste0(
+    "O/E = ", f2(round(obs_day, 2) / round(mean(p_cox), 2)),
+    "\nc = ", f2(c(c_time(time_pairs(p_cox, riders$minutes)), c_time(time_pairs(p_cox, late_min))))
+  )
+)
+ggplot(late_dat, aes(day, value, fill = what)) +
+  geom_col(position = position_dodge(width = 0.8), width = 0.7) +
+  geom_text(aes(label = f2(value)), position = position_dodge(width = 0.8), vjust = -0.4, size = 7) +
+  geom_text(data = late_lab, aes(day, 1.15, label = label), inherit.aes = FALSE, size = 7, fontface = "bold", lineheight = 0.9) +
+  scale_fill_manual(values = c("Observed" = "#9aa5b1", "Mean predicted" = "#2a6ab0"), name = NULL) +
+  scale_y_continuous(limits = c(0, 1.3), breaks = seq(0, 1, 0.25)) +
+  labs(x = NULL, y = "On a bus by 8:20") +
+  theme_minimal(base_size = 22) +
+  theme(legend.position = "top", panel.grid.major.x = element_blank(), panel.grid.minor = element_blank())
+```
+
+::: fragment
+Discrimination is about **order**, so a late bus cannot change it. Calibration is about the **time to event**.
+:::
+
+::: notes
+The same picture as observed against predicted for Models A and B. The blue bars are identical: the model sees the same riders. On the late day nobody is on a bus by 8:20, so the grey bar is empty and O/E falls to zero. The order of boarding is unchanged, so c is the same on both days.
+
+This is the example from the lecture: near-perfect discrimination, and the bus comes late, so calibration is terrible. In medicine the late bus is a change in baseline risk: a new population, better treatment, a different era. Predictions are made for a horizon, such as the 5-year risk of stroke.
+:::
+
+## The baseline is the timetable
+
+```{r}
+#| fig-width: 12
+#| fig-height: 5
+#| out-width: "100%"
+# Illustrative baseline: nobody boards before a bus comes (S0 = 1); each bus is a step down.
+# Anchored at S0(8:20) = s0 on an on-time day; a rider with lp = 0 is on the second bus.
+staircase <- function(day, shift) {
+  data.frame(day = day, minutes = c(0, bus_times + shift, 60), s = c(1, s0, 0, 0))
+}
+base_dat <- rbind(staircase("On time", 0), staircase("15 minutes late", delay))
+base_dat$day <- factor(base_dat$day, levels = c("On time", "15 minutes late"))
+at_horizon <- data.frame(
+  day = factor(c("On time", "15 minutes late"), levels = levels(base_dat$day)),
+  minutes = horizon, s = c(s0, 1)
+)
+ggplot(base_dat, aes(minutes, s, colour = day)) +
+  geom_vline(xintercept = horizon, linetype = "dotted", colour = "grey40") +
+  geom_step(linewidth = 1.6, direction = "hv") +
+  geom_point(data = at_horizon, size = 5) +
+  geom_label(data = at_horizon, aes(label = f2(s)), nudge_x = 2.5, size = 6, show.legend = FALSE) +
+  scale_colour_manual(values = c("On time" = "#2a6ab0", "15 minutes late" = "#b03030"), name = NULL) +
+  scale_x_continuous(limits = c(0, 60), breaks = seq(0, 60, 10),
+    labels = function(m) sprintf("%d:%02d", 8 + m %/% 60, m %% 60)) +
+  scale_y_continuous(limits = c(0, 1.05), breaks = seq(0, 1, 0.25)) +
+  labs(x = NULL, y = expression(S[0](t))) +
+  theme_minimal(base_size = 22) +
+  theme(legend.position = "top", panel.grid.minor = element_blank())
+```
+
+Before a bus comes nobody can board, so $S_0(t) = 1$; each bus is a step down. A model that takes $S_0$ from the published timetable is calibrated only when the buses run on time.
+
+::: notes
+The heights between buses are illustrative, anchored at the `r f2(s0)` we set for 8:20. The dotted line is 8:20: on time, a rider with lp = 0 has a `r f2(s0)` chance of still waiting; when the buses are late, 1.00.
+
+There are two ways to get a baseline. Usually it is estimated from the data: the observed boarding times (in a Cox model, the Breslow estimator). Or it comes from a published source: here the bus timetable; in medicine, a life table or a registry for baseline mortality or incidence. Either way, the predictors set the order and the baseline sets the clock. Using a model somewhere new is like trusting another city's timetable. If the day is known to matter (snow, rush hour), a model can carry one baseline per kind of day: a stratified Cox model.
+:::
+
+## Calibration depends on the time horizon
+
+```{r}
+horizons <- c(horizon, horizon + 20)
+kable(
+  data.frame(
+    paste0("On board by 8:", horizons),
+    f2(sapply(horizons, function(h) mean(riders$minutes <= h))),
+    f2(sapply(horizons, function(h) mean(riders$minutes + delay <= h)))
+  ),
+  col.names = c("Observed", "On time", "15 minutes late"), align = "lcc"
+)
+```
+
+The late bus changes the **baseline**, $S_0(t)$. On the late day nobody is on a bus by 8:`r horizon`, so $S_0(\text{8:`r horizon`})$ should be 1.00, not `r f2(s0)`.
+
+The linear predictor $\text{lp}_i$, which sets the order, is untouched. Recalibrating means re-estimating $S_0(t)$ for the new day, just as we shifted the intercept for Model A.
+
+::: notes
+The late day at 8:40 looks like the on-time day at 8:20. Calibration has to be checked at the horizon the model is used for. $S_i(t)$ is rider i's chance of still waiting at time t.
+:::
+
+## Why calibration is harder than discrimination
+
+::: incremental
+- Age, cane and superhero status tell us **who gets on before whom**: the order
+- Nothing in our data says **when the bus comes**. That is the baseline, $S_0(t)$: the timetable, the traffic, the day
+- Discrimination needs only the order, so it travels from one bus stop to another
+- Calibration needs the order **and** the baseline, so it has to be checked, and often re-estimated, wherever the model is used
+:::
+
+::: notes
+In medicine the baseline is the background risk of the population: a different country, a different decade, better treatment. That is why a model such as the Framingham equations can rank Canadians well and still over-predict their risk. The predictors describe the people; the baseline describes the setting.
+:::
+
+# More riders
+
+```{r}
+#| label: simulate
+set.seed(6101)
+n <- 5000
+sim <- data.frame(
+  age = round(runif(n, 30, 90)),
+  cane = rbinom(n, 1, 0.15),
+  superhero = rbinom(n, 1, 0.02)
+)
+sim_lp <- function(b, d) b[1] + b[2] * (d$age - 60) / 10 + b[3] * d$cane + b[4] * d$superhero
+true_coef <- c(0.5, coef_a[-1]) # same slopes as Model A, lower intercept
+sim$boarded <- rbinom(n, 1, plogis(sim_lp(true_coef, sim)))
+sim$model_a <- plogis(sim_lp(coef_a, sim)) # Model A's own formula
+sim_fit <- glm(boarded ~ 1, offset = qlogis(model_a), family = binomial, data = sim)
+sim$model_a_recal <- plogis(qlogis(sim$model_a) + coef(sim_fit)[[1]])
+
+# Calibration summaries (TRIPOD+AI): intercept, slope, and LOESS-based ICI, E50, E90
+cal_summary <- function(p, y) {
+  y_hat <- predict(loess(y ~ p, span = 0.75, degree = 2))
+  d <- abs(p - y_hat)
+  c(
+    intercept = coef(glm(y ~ 1, offset = qlogis(p), family = binomial))[[1]],
+    slope = coef(glm(y ~ qlogis(p), family = binomial))[[2]],
+    ici = mean(d), e50 = median(d), e90 = unname(quantile(d, 0.9))
+  )
+}
+versions <- list("Model A" = sim$model_a, "Recalibrated A" = sim$model_a_recal)
+cal_stats <- lapply(versions, cal_summary, y = sim$boarded)
+ici_a <- cal_stats[["Model A"]][["ici"]]
+ici_recal <- cal_stats[["Recalibrated A"]][["ici"]]
+
+# Curve with 95% band on a grid, decile points, and a rug of predictions
+curve_dat <- do.call(rbind, lapply(names(versions), function(v) {
+  p <- versions[[v]]
+  fit <- loess(sim$boarded ~ p, span = 0.75, degree = 2)
+  grid <- seq(quantile(p, 0.01), quantile(p, 0.99), length.out = 100)
+  pr <- predict(fit, newdata = data.frame(p = grid), se = TRUE)
+  data.frame(version = v, p = grid, fit = pr$fit, lo = pr$fit - 1.96 * pr$se.fit, hi = pr$fit + 1.96 * pr$se.fit)
+}))
+decile_dat <- do.call(rbind, lapply(names(versions), function(v) {
+  p <- versions[[v]]
+  g <- ceiling(rank(p, ties.method = "first") / length(p) * 10)
+  data.frame(version = v, p = tapply(p, g, mean), obs = tapply(sim$boarded, g, mean))
+}))
+rug_dat <- do.call(rbind, lapply(names(versions), function(v) data.frame(version = v, p = versions[[v]])))
+stat_lab <- data.frame(
+  version = names(versions),
+  label = sapply(cal_stats, function(s) paste0(
+    "Intercept ", f2(s[["intercept"]]), "   Slope ", f2(s[["slope"]]),
+    "\nICI ", f2(s[["ici"]]), "   E90 ", f2(s[["e90"]])
+  ))
+)
+```
+
+## A calibration plot needs many riders
+
+```{r}
+#| fig-width: 12
+#| fig-height: 6
+#| out-width: "100%"
+ggplot(curve_dat, aes(p)) +
+  geom_abline(linetype = "dashed", colour = "grey50") +
+  geom_ribbon(aes(ymin = lo, ymax = hi), fill = "#2a6ab0", alpha = 0.2) +
+  geom_line(aes(y = fit), colour = "#2a6ab0", linewidth = 1.3) +
+  geom_point(data = decile_dat, aes(p, obs), shape = 21, size = 3.5, stroke = 1.2, fill = "white") +
+  geom_rug(data = rug_dat, aes(x = p), sides = "b", alpha = 0.03, inherit.aes = FALSE) +
+  geom_text(data = stat_lab, aes(x = 0.02, y = 0.97, label = label), hjust = 0, vjust = 1, size = 5.5, lineheight = 0.95, inherit.aes = FALSE) +
+  facet_wrap(~version) +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  labs(x = "Predicted probability", y = "Observed proportion") +
+  theme_minimal(base_size = 22) +
+  theme(strip.text = element_text(size = 22, face = "bold"), panel.spacing.x = unit(2, "lines"))
+```
+
+[`r format(n, big.mark = ",")` simulated riders scored with Model A's formula. **Line**: LOESS curve with 95% band. **Circles**: tenths of predicted risk. **Ticks**: where predictions fall. **Dashed**: perfect calibration.]{.small}
+
+::: notes
+TRIPOD+AI asks for a flexible calibration curve, such as LOESS, with summary measures, rather than grouped points alone. Simulated, not real. The true model has Model A's slopes but an intercept of `r fmt_coef(true_coef[1])` instead of `r fmt_coef(coef_a[1])`, so Model A over-predicts for everyone. Predictions only span about `r f2(quantile(sim$model_a, 0.01))` to `r f2(quantile(sim$model_a, 0.99))`, because age, cane and superhero status are weak predictors: a short curve is honest. Recalibration moves the curve onto the diagonal.
+:::
+
+## Reading the plot, and how we recalibrated
+
+- **Calibration intercept**: are predictions too high or too low overall? Ideal 0. Model A: `r f2(cal_stats[["Model A"]][["intercept"]])`, too high
+- **Calibration slope**: is the spread right? Ideal 1. Below 1, predictions are too extreme (common after overfitting). Model A: `r f2(cal_stats[["Model A"]][["slope"]])`, about right
+- Only the intercept is wrong, so we shift every rider's log-odds by the same amount:
+
+::: {.code-small}
+```{r}
+#| echo: true
+fit <- glm(boarded ~ 1, offset = qlogis(model_a),
+  family = binomial, data = sim)
+sim$model_a_recal <- plogis(qlogis(sim$model_a) + coef(fit))
+```
+:::
+
+[`qlogis()`: probability to log-odds; `plogis()`: back again. The offset keeps each rider's log-odds fixed, so only the shift $a$ = `r f2(coef(sim_fit)[[1]])` is estimated. If the slope were off too, fit $\text{logit}(p^{*}) = a + b\,\text{logit}(p)$ instead; machine learning calls this *Platt scaling*.]{.defs}
+
+::: notes
+After recalibration the intercept is `r f2(cal_stats[["Recalibrated A"]][["intercept"]])` and the slope still `r f2(cal_stats[["Recalibrated A"]][["slope"]])`: shifting cannot change the spread. Here we recalibrated and checked on the same simulated riders, which flatters the result. In practice, recalibrate with data from the new setting, then check on fresh data.
+:::
+
+## Summary measures: ICI, E50 and E90
+
+How far is the curve from the diagonal, on average and at worst?
+
+$$
+\text{ICI} = \frac{1}{N}\sum_{i=1}^{N} \left| p_i - \hat{y}_i \right|
+$$
+
+[$\hat{y}_i$: the LOESS curve's observed proportion at rider $i$'s predicted probability. E50 and E90: the median and the 90th percentile of $|p_i - \hat{y}_i|$.]{.defs}
+
+```{r}
+kable(
+  data.frame(
+    c("Calibration intercept (ideal 0)", "Calibration slope (ideal 1)", "ICI", "E50", "E90"),
+    sapply(c("intercept", "slope", "ici", "e50", "e90"), function(k) f2(cal_stats[["Model A"]][[k]])),
+    sapply(c("intercept", "slope", "ici", "e50", "e90"), function(k) f2(cal_stats[["Recalibrated A"]][[k]]))
+  ),
+  col.names = c("", "Model A", "Recalibrated A"), align = "lcc", row.names = FALSE
+)
+```
+
+[Austin and Steyerberg. *Stat Med* 2019;38:4051–65. doi:10.1002/sim.8281]{.small}
+
+## A ladder of recalibration
+
+::: {.glossary}
+```{r}
+kable(
+  data.frame(
+    c("1", "1", "2", "3", "4", "5"),
+    c("Intercept (in the large)", "Baseline (survival)", "Intercept and slope (*Platt*)",
+      "Isotonic regression", "Revision", "Refit"),
+    c("One shift", "$S_0(t)$", "Shift and stretch", "Any increasing curve",
+      "Some coefficients", "Everything"),
+    c("Model A over-predicts", "The bus is late", "Model C is overconfident",
+      "An irregular curve", "Model B's superhero sign", "Nothing else works")
+  ),
+  col.names = c("Step", "Method", "What changes", "Bus-stop problem"), align = "clll", escape = FALSE
+)
+```
+:::
+
+[Climb only as far as you need: each step needs more data and can overfit the recalibration itself. Steps 1 to 3 keep the order of riders, so they cannot change discrimination; steps 4 and 5 change the model itself.]{.defs}
+
+::: notes
+Start at the bottom. Calibration-in-the-large needs only the outcome rate in the new setting; the slope needs individual outcomes; isotonic regression needs many. Revision and refitting are no longer recalibration: they change the ranking, which is why Model B cannot be rescued by recalibration.
+:::
+
+```{r}
+#| label: model-c
+# Model C: developed at a small, unusual bus stop and overfitted.
+# Same predictors, coefficients about 2.5 times too large, intercept too high.
+coef_c <- c(1.5, 0.25, 2.5, -2.5)
+sim$model_c <- plogis(sim_lp(coef_c, sim))
+fit_c1 <- glm(boarded ~ 1, offset = qlogis(model_c), family = binomial, data = sim)
+fit_c2 <- glm(boarded ~ qlogis(model_c), family = binomial, data = sim)
+ab <- round(coef(fit_c2), 2) # a and b, two decimals for the hand calculation
+iso <- as.stepfun(isoreg(sim$model_c, sim$boarded))
+c_versions <- list(
+  "Model C" = sim$model_c,
+  "Intercept only" = plogis(qlogis(sim$model_c) + coef(fit_c1)[[1]]),
+  "Intercept and slope" = plogis(ab[1] + ab[2] * qlogis(sim$model_c)),
+  "Isotonic" = iso(sim$model_c)
+)
+safe <- function(q) pmin(pmax(q, 1e-4), 1 - 1e-4)
+c_stats <- lapply(c_versions, function(q) cal_summary(safe(q), sim$boarded))
+riders$model_c <- plogis(sim_lp(coef_c, riders))
+riders$model_c_recal <- plogis(ab[1] + ab[2] * qlogis(riders$model_c))
+```
+
+## Step 2: intercept and slope
+
+Model C was developed at a small, unusual bus stop. Same predictors, but the coefficients are too large: $\text{logit}(p) = `r fmt_coef(coef_c[1])` + `r f2(coef_c[2])`\,\tfrac{\text{age} - 60}{10} + `r fmt_coef(coef_c[3])`\,\text{cane} − `r fmt_coef(-coef_c[4])`\,\text{superhero}$
+
+$$
+\text{logit}(p^{*}) = a + b\,\text{logit}(p) \qquad a = `r f2(ab[1])`, \quad b = `r f2(ab[2])`
+$$
+
+[$b = 1$ is intercept-only recalibration (step 1). $b < 1$: predictions are too extreme, so they are pulled toward the middle. $b > 1$: too timid, so they are spread out. Machine learning calls this *Platt scaling*.]{.defs}
+
+::: {.code-small}
+```{r}
+#| echo: true
+fit <- glm(boarded ~ qlogis(model_c), family = binomial, data = sim)
+sim$model_c_recal <- predict(fit, type = "response")
+```
+:::
+
+## Model C at the bus stop
+
+```{r}
+kable(
+  data.frame(riders$rider, riders$boarded, f2(riders$model_c), f2(riders$model_c_recal)),
+  col.names = c("`rider`", "`boarded`", "Model C", "Recalibrated C"), align = "lccc"
+)
+```
+
+Clara: $\text{logit}(`r f2(riders$model_c[3])`) = `r f2(qlogis(riders$model_c[3]))`$, so $p^{*} = \text{plogis}(`r f2(ab[1])` + `r f2(ab[2])` \times `r f2(qlogis(riders$model_c[3]))`) = `r f2(riders$model_c_recal[3])`$
+
+[Every prediction moves toward the middle; the order of riders does not change.]{.defs}
+
+::: notes
+Model C is sure Clara will board (0.99) and sure Batman will not. Shrinking the log-odds by b = `r f2(ab[2])` keeps the order but tempers the confidence. Five riders are far too few to estimate a slope; a and b come from the `r format(n, big.mark = ",")` simulated riders.
+:::
+
+## When the slope is wrong too
+
+```{r}
+#| fig-width: 13
+#| fig-height: 4
+#| out-width: "100%"
+c_curve <- do.call(rbind, lapply(names(c_versions), function(v) {
+  q <- c_versions[[v]]
+  fit <- loess(sim$boarded ~ q, span = 0.75, degree = 2)
+  grid <- seq(quantile(q, 0.01), quantile(q, 0.99), length.out = 100)
+  pr <- predict(fit, newdata = data.frame(q = grid), se = TRUE)
+  data.frame(version = v, p = grid, fit = pr$fit, lo = pr$fit - 1.96 * pr$se.fit, hi = pr$fit + 1.96 * pr$se.fit)
+}))
+c_curve$version <- factor(c_curve$version, levels = names(c_versions))
+c_lab <- data.frame(
+  version = factor(names(c_versions), levels = names(c_versions)),
+  label = sapply(c_stats, function(s) paste0("Slope ", f2(s[["slope"]]), "   ICI ", f2(s[["ici"]])))
+)
+ggplot(c_curve, aes(p)) +
+  geom_abline(linetype = "dashed", colour = "grey50") +
+  geom_ribbon(aes(ymin = pmax(lo, 0), ymax = pmin(hi, 1)), fill = "#2a6ab0", alpha = 0.2) +
+  geom_line(aes(y = fit), colour = "#2a6ab0", linewidth = 1.3) +
+  geom_text(data = c_lab, aes(x = 0.02, y = 0.97, label = label), hjust = 0, vjust = 1, size = 5, inherit.aes = FALSE) +
+  facet_wrap(~version, nrow = 1) +
+  coord_equal(xlim = c(0, 1), ylim = c(0, 1)) +
+  scale_x_continuous(breaks = c(0, 0.5, 1)) +
+  labs(x = "Predicted probability", y = "Observed proportion") +
+  theme_minimal(base_size = 20) +
+  theme(strip.text = element_text(size = 18, face = "bold"), panel.spacing.x = unit(1.2, "lines"))
+```
+
+[Intercept-only recalibration moves the curve but leaves it tilted. Adding the slope straightens it. Isotonic regression fits any increasing curve, and checked on the riders it was fitted to, it flatters itself.]{.small}
+
+## Beyond the formula
+
+- **Isotonic regression**: the best increasing staircase through the data. No formula, so it needs many riders, and it can overfit
+- **Model revision**: re-estimate the coefficients that are wrong. Model B's superhero coefficient (`r fmt_coef(coef_b[4])`) points the wrong way; no shift or stretch can put Batman back in line
+- **Refit**: build a new model
+- **Which step?** Start at the bottom and climb only while the step below leaves miscalibration; check the result on fresh data
+
+::: notes
+This is the logic of a closed testing procedure for choosing how far to update a model (Vergouwe and colleagues, Statistics in Medicine, 2017; doi:10.1002/sim.7179). Isotonic regression and Platt scaling are the methods most used in machine learning; logistic recalibration and baseline updating are the most used in clinical prediction.
+:::
+
+## Two vocabularies, one idea
+
+::: {.glossary}
+```{r}
+kable(
+  data.frame(
+    c("Outcome", "Predictors", "Coefficient; intercept", "Logistic function (`plogis()`)",
+      "c statistic, concordance", "Sensitivity", "1 − specificity", "Positive predictive value",
+      "Somers' D", "Brier score", "Log-likelihood (negative)", "Logistic recalibration",
+      "Development and validation data"),
+    c("Label, target", "Features", "Weight; bias", "Sigmoid",
+      "AUC, AUROC", "Recall, true positive rate", "False positive rate", "Precision",
+      "Gini coefficient", "Mean squared error of probabilities", "Log loss, cross-entropy", "Platt scaling",
+      "Training and test data")
+  ),
+  col.names = c("Biostatistics", "Machine learning"), align = "ll"
+)
+```
+:::
+
+::: notes
+Same ideas, two names. Students reading machine-learning papers and clinical prediction papers will meet both. Log loss, like the Brier score, mixes discrimination and calibration.
+:::
+
+## Take-home points
+
+1. **Discrimination** is about order: the c statistic counts correctly ranked pairs, which equals the area under the ROC curve
+2. **Calibration** is about agreement: compare predicted with observed, on average (O/E) and across the range (calibration plot, ICI)
+3. The **Brier score**, **F1** and **accuracy** blend both, so they cannot tell you which problem a model has
+4. **Recalibration** can fix calibration but never discrimination: start with the intercept, and add the slope only if needed
+5. **Time** matters for calibration, not discrimination: a late bus breaks calibration and leaves the ranking alone
+
+## Try it yourself
+
+::: {.code-small}
+```{r}
+#| echo: true
+#| eval: false
+riders <- data.frame(
+  rider     = c("Agnes", "Beatrice", "Clara", "Dorothy", "Batman"),
+  age       = c(35, 80, 85, 80, 40),
+  cane      = c(0, 0, 1, 0, 0),
+  superhero = c(0, 0, 0, 0, 1),
+  boarded   = c(0, 1, 1, 1, 0)
+)
+# Model A (see the slide "Two models")
+riders$model_a <- with(riders, plogis(
+  2.0 + 0.1 * (age - 60) / 10 + 1.0 * cane - 1.0 * superhero
+))
+p <- riders$model_a
+
+# c statistic (ties count half)
+pairs <- expand.grid(
+  boarded = which(riders$boarded == 1),
+  waited = which(riders$boarded == 0)
+)
+better <- p[pairs$boarded] > p[pairs$waited]
+tied <- p[pairs$boarded] == p[pairs$waited]
+mean(better + 0.5 * tied)
+
+mean(riders$boarded) / mean(p) # O/E
+mean((p - riders$boarded)^2)   # Brier score
+
+# Recalibrate: shift the log-odds
+fit <- glm(boarded ~ 1, offset = qlogis(model_a), family = binomial, data = riders)
+plogis(qlogis(p) + coef(fit))
+```
+:::

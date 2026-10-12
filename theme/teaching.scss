@@ -72,3 +72,16 @@ $presentation-heading-font-weight: 600;
 .reveal .slides section > h2 {
   margin-bottom: 0.75em;
 }
+
+/* Extra space above a closing statement */
+.reveal .spaced {
+  margin-top: 1.2em;
+}
+
+/* Compact two-column glossary table */
+.reveal .glossary table {
+  font-size: 0.82em;
+}
+.reveal .glossary td, .reveal .glossary th {
+  padding: 0.12em 0.6em;
+}
